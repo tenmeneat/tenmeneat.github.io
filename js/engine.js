@@ -210,11 +210,102 @@ function createEngine(cv, opt, cb) {
     const p = G.nodes[i].p; const yaw = Math.atan2(-p[0], p[2]); const z1 = -p[0] * Math.sin(yaw) + p[2] * Math.cos(yaw);
     return [yaw, clamp(Math.atan2(p[1], z1), -1.35, 1.35)];
   }
+  // ---------- 월드 진입: 응집 → 조립 ----------
+  // 누른 세계에 속한 노드들이 빛줄기로 한 점에 모이고(그 점이 코어 자리로 이동), 코어가 점화되며 오러리가 조립되고,
+  // 모였던 노드들이 섹션(행성)별로 날아가 행성이 된다. 돌아갈 때는 역순. GP = 이 입자들의 상태
+  let GP = null;
+  const ANT = 220;   // 예고 시간: 이 동안 선택된 무리가 금빛으로 밝아진 뒤 응집이 시작된다
+  const PROJ = {}; G.projects.forEach((p) => { PROJ[p.moc] = p; });
+  function planetOf(w, j) {
+    if (j === w.center) return -1;   // 중심(MOC·주제 노드)은 코어가 된다
+    const n = G.nodes[j];
+    return w.planets.findIndex((p) => p.act.note === j || (p.act.sec !== undefined && (n.sec || '0_개요') === p.act.sec) ||
+      (p.act.go !== undefined && (p.act.go === j || (PROJ[p.act.go] && PROJ[p.act.go].members.indexOf(j) >= 0))));
+  }
+  function gatherParts(w, i) {
+    const set = new Set([i]);
+    if (w.project) w.project.members.forEach((j) => set.add(j));
+    else { G.adj[i].forEach((j) => set.add(j)); w.planets.forEach((p) => { if (p.act.go !== undefined) set.add(p.act.go); }); }
+    const out = []; set.forEach((j) => { if (out.length < 70) out.push({ j: j, k: planetOf(w, j), dl: Math.random() * 220, b: (Math.random() - 0.5) * 0.5 }); });
+    return out;
+  }
   function dive(i) {
     if (mode !== 'main' || i < 0) return;
-    const a = alignTo(i); st.tYaw = a[0]; st.tPitch = a[1]; st.vy = 0; st.vp = 0;
-    mode = 'dive'; dv = { i: i, t0: performance.now(), zmax: 0 }; st.hover = -1; cv.style.cursor = 'default';
+    st.tYaw = null; st.tPitch = null; st.vy = 0; st.vp = 0;   // 카메라는 돌진하지 않는다: 노드들이 이쪽으로 모인다
+    const n = performance.now(), w = buildWorld(i);
+    mode = 'dive'; dv = { i: i, t0: n, zmax: 0, w: w }; GP = { phase: 'gather', t0: n, i: i, parts: gatherParts(w, i) };
+    st.hover = -1; cv.style.cursor = 'default';
     cb.onDive(i);
+  }
+  // 곡선 보간: a → b, 진행 e, 옆으로 휘는 정도 bend(거리 비율)
+  function arcPt(ax, ay, bx, by, e, bend, o) {
+    const dx = bx - ax, dy = by - ay, s = Math.sin(Math.PI * e) * bend; o[0] = ax + dx * e - dy * s; o[1] = ay + dy * e + dx * s; return o;
+  }
+  const gp0 = [0, 0], gp1 = [0, 0];
+  function spark(x, y, x0, y0, col, a, big) {   // 꼬리 달린 빛 알갱이 (가산 합성 상태에서)
+    ctx.globalAlpha = a * 0.5; ctx.strokeStyle = GOLD_L; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x, y); ctx.stroke();
+    const z = big ? 22 : 13; ctx.globalAlpha = a * 0.9; ctx.drawImage(sprite(col), x - z / 2, y - z / 2, z, z);
+    ctx.globalAlpha = a; ctx.fillStyle = '#FFF8E6'; ctx.fillRect(x - 0.9, y - 0.9, 1.8, 1.8);
+  }
+  function drawGP(now) {
+    const t = now - GP.t0, C = wCenter(), ps = GP.parts;
+    ctx.globalCompositeOperation = 'lighter';
+    if (GP.phase === 'gather') {
+      const hk = D + GP.i;
+      // 예고(0~ANT): 이 세계에 속한 노드들과 허브를 잇는 실이 금빛으로 한 번 밝아진다 — "이 무리가 간다"
+      const pre = Math.sin(Math.PI * clamp(t / (ANT + 220), 0, 1));
+      if (pre > 0.01 && ss[hk] > 0) {
+        ctx.strokeStyle = GOLD_L; ctx.lineWidth = 0.8;
+        ps.forEach((q) => {
+          const k = D + q.j; if (ss[k] <= 0) return;
+          ctx.globalAlpha = pre * 0.4; ctx.beginPath(); ctx.moveTo(sx[hk], sy[hk]); ctx.lineTo(sx[k], sy[k]); ctx.stroke();
+          const z = 26; ctx.globalAlpha = pre * 0.9; ctx.drawImage(sprite(GOLD_L), sx[k] - z / 2, sy[k] - z / 2, z, z);
+        });
+      }
+      // 응집: 각 노드 → 모이는 점(누른 노드 → 코어 자리로 이동)
+      const tg = t - ANT, ge = eIO(clamp((tg - 350) / 600, 0, 1)), gx = sx[hk] + (C[0] - sx[hk]) * ge, gy = sy[hk] + (C[1] - sy[hk]) * ge;
+      ps.forEach((q) => {
+        const k = D + q.j; if (ss[k] <= 0) return;
+        const e = eIn(clamp((tg - 60 - q.dl) / 620, 0, 1)); if (e >= 1) return;
+        arcPt(sx[k], sy[k], gx, gy, e, q.b, gp0); arcPt(sx[k], sy[k], gx, gy, Math.max(0, e - 0.08), q.b, gp1);
+        spark(gp0[0], gp0[1], gp1[0], gp1[1], G.nodes[q.j].color, 1, q.j === GP.i);
+      });
+      const f = clamp((tg - 300) / 600, 0, 1), z = 24 + 60 * f; ctx.globalAlpha = (0.6 + 0.4 * f) * clamp(tg / 200, 0, 1); ctx.drawImage(sprite(GOLD_L), gx - z / 2, gy - z / 2, z, z);
+    } else if (GP.phase === 'asm') {
+      // 점화 → 조립: 코어 자리에 뭉친 입자들이 행성 순서대로 날아가 행성이 된다
+      const bl = Math.sin(Math.PI * clamp(t / 700, 0, 1)), bz = C[2] * (0.6 + 2.2 * bl); ctx.globalAlpha = 0.85 * bl; ctx.drawImage(sprite(GOLD_L), C[0] - bz / 2, C[1] - bz / 2, bz, bz);
+      if (t < 650) {   // 점화 충격파: 금빛 고리 두 겹이 퍼진다
+        const e = eOut(t / 650); ctx.strokeStyle = GOLD_L;
+        [1, 0.72].forEach((s, q) => { ctx.lineWidth = q ? 1 : 1.8; ctx.globalAlpha = (1 - t / 650) * (q ? 0.5 : 0.9); ctx.beginPath(); ctx.arc(C[0], C[1], C[2] * (0.35 + 3.2 * e) * s, 0, TAU); ctx.stroke(); });
+      }
+      ps.forEach((q) => {   // 도착: 행성에 닿는 순간 작게 번쩍 (그 순간 링이 하나 늘어난다 — drawWorld의 ringShow)
+        if (q.k < 0) return; const p = world.planets[q.k]; if (!p) return;
+        const u = t - (250 + q.k * 110 + q.dl * 0.5 + 600); if (u < 0 || u > 300) return;
+        const f2 = 1 - u / 300, z = p.sr * (1.5 + 2 * f2); ctx.globalAlpha = 0.8 * f2; ctx.drawImage(sprite(GOLD_L), p.sx - z / 2, p.sy - z / 2, z, z);
+      });
+      let live = false;
+      ps.forEach((q) => {
+        if (q.k < 0) { const a = 1 - clamp(t / 400, 0, 1); if (a > 0) { live = true; spark(C[0], C[1], C[0], C[1], world.color, a, false); } return; }
+        const p = world.planets[q.k]; if (!p) return;
+        const e = eIO(clamp((t - 250 - q.k * 110 - q.dl * 0.5) / 600, 0, 1)); if (e >= 1) return; live = true;
+        if (e <= 0) { const a = t * 0.004 + q.dl; spark(C[0] + Math.cos(a) * 6, C[1] + Math.sin(a) * 6, C[0], C[1], world.color, 0.7, false); return; }   // 출발 전: 코어 주위에서 맴돈다
+        arcPt(C[0], C[1], p.sx, p.sy, e, q.b * 0.6, gp0); arcPt(C[0], C[1], p.sx, p.sy, Math.max(0, e - 0.08), q.b * 0.6, gp1);
+        spark(gp0[0], gp0[1], gp1[0], gp1[1], world.color, 1, false);
+      });
+      if (!live && t > 700) GP = null;
+    } else {
+      // 역순: 행성 → 코어로 모였다가(0~450ms) → 원래 노드 자리로 흩어진다
+      ps.forEach((q) => {
+        const k = D + q.j, p = q.k >= 0 && world ? world.planets[q.k] : null;
+        if (t < 450) { if (!p) return; const e = eIn(clamp(t / 450, 0, 1)); arcPt(p.sx, p.sy, C[0], C[1], e, q.b * 0.6, gp0); arcPt(p.sx, p.sy, C[0], C[1], Math.max(0, e - 0.08), q.b * 0.6, gp1); spark(gp0[0], gp0[1], gp1[0], gp1[1], G.nodes[q.j].color, 1, false); return; }
+        if (ss[k] <= 0) return;
+        const e = eIO(clamp((t - 450 - q.dl) / 650, 0, 1)), a = 1 - clamp((t - 950 - q.dl) / 250, 0, 1); if (a <= 0) return;
+        arcPt(C[0], C[1], sx[k], sy[k], e, q.b, gp0); arcPt(C[0], C[1], sx[k], sy[k], Math.max(0, e - 0.08), q.b, gp1);
+        spark(gp0[0], gp0[1], gp1[0], gp1[1], G.nodes[q.j].color, a, q.j === GP.i);
+      });
+      if (t > 1450) GP = null;
+    }
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   }
   // pointer
   function pos(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
@@ -707,7 +798,7 @@ function createEngine(cv, opt, cb) {
         return { u: u, v: cross3(nm, u), r: nr > 1 ? 1.35 + 0.55 * q / (nr - 1) : 1.6, ph: r0() * 6.28, sp: (0.0004 + r0() * 0.0005) * (r0() < 0.5 ? -1 : 1) };
       });
     });
-    st.wyaw = 0; st.wpitch = 0; wHover = -1; dp = null;
+    st.wyaw = 0; st.wpitch = 0; wHover = -1; dp = null; GP = null;
     return w;
   }
   function wCenter() { const mob = W < 760; return mob ? [W / 2, H * 0.27, Math.min(W * 0.16, H * 0.11)] : [W * 0.65, H * 0.5, Math.min(W * 0.13, H * 0.2)]; }
@@ -767,8 +858,9 @@ function createEngine(cv, opt, cb) {
     placeNodes(); const a = alignTo(world.i);
     st.yaw = a[0]; st.pitch = a[1]; st.tYaw = a[0]; st.tPitch = a[1];
     cyw = Math.cos(st.yaw); syw = Math.sin(st.yaw); cp = Math.cos(st.pitch); sp = Math.sin(st.pitch);
-    const r3 = rotOnly(G.nodes[world.i].p); cam.fx = r3[0]; cam.fy = r3[1];
-    dv = { i: world.i, t0: performance.now(), zmax: r3[2] + F - 0.2 }; cam.z = dv.zmax; mode = 'rise';
+    cam.fx = 0; cam.fy = 0; cam.z = 0;
+    const n = performance.now(); dv = { i: world.i, t0: n, zmax: 0 }; mode = 'rise';
+    GP = { phase: 'back', t0: n, i: world.i, parts: gatherParts(world, world.i) };
     cb.onRise();
   }
   let wcy_ = 0, wsy_ = 0, wcp_ = 1, wsp_ = 0;
@@ -921,7 +1013,8 @@ function createEngine(cv, opt, cb) {
   function drawOrb(p, x, y, r, a, now, hl) {
     const rs = r * 0.48, ya = now * 0.00022 + p.spin, cy = Math.cos(ya), sy = Math.sin(ya), BK = new Path2D(), FR = new Path2D();
     const beads = [];
-    p.rings.forEach((R) => {
+    p.rings.forEach((R, ri) => {
+      if (p.ringShow !== undefined && ri >= p.ringShow) return;
       let qx = 0, qy = 0, qz = 0;
       for (let k = 0; k <= 40; k++) {
         orbPt(R, k / 40 * TAU, rs, cy, sy, pq);
@@ -1006,9 +1099,10 @@ function createEngine(cv, opt, cb) {
     world.planets.forEach((p, k) => {
       const th = p.a0 + el * 0.00005 + st.wyaw * 0.35, X = Math.cos(th) * Ro, Z = Math.sin(th) * Ro, z = Z * tC, s = 6 / (6 - z);
       p.sx = C[0] + X * s * C[2]; p.sy = C[1] + Z * tS * s * C[2] * 0.95; p.z = z; p.s = s; p.X = X; p.Z = Z;
-      p.pa = eOut(clamp((el - 450 - k * 110) / 900, 0, 1)) * aW;
+      p.pa = eOut(clamp((el - 450 - k * 110 - (world.asm ? 350 : 0)) / 900, 0, 1)) * aW;   // 조립 진입이면 입자가 도착할 즈음 나타난다
       p.sr = C[2] * (mob ? 0.26 : 0.22) * p.rad * s * (0.6 + 0.4 * p.pa);
-      p.dropA = 1;
+      p.dropA = 1; p.ringShow = undefined;
+      if (GP && GP.phase === 'asm' && GP.arr && GP.arr[k]) { const ar = GP.arr[k], tt = now - GP.t0; let c = 0; ar.forEach((A) => { if (tt >= A) c++; }); p.ringShow = Math.ceil(p.rings.length * c / ar.length); }   // 조립 중: 도착한 노트 수만큼 링
       if (dT >= 0 && k === dp.k) {   // 제자리에서 무게를 실어 천천히 잠긴다: 처음엔 느리게, 물에 들어간 뒤엔 저항으로 다시 느려진다
         if (dp.x === undefined) { dp.x = X; dp.z = Z; }
         const d = eIO(clamp(dT / 1000, 0, 1)), sink = eIn(clamp((dT - DROP_HIT) / 850, 0, 1));
@@ -1116,19 +1210,22 @@ function createEngine(cv, opt, cb) {
       if (pSet) { const v = clamp((now - pSet) / 1300, 0, 1); pE = 1 - eIO(v); pS = 1 + 0.5 * (1 - eOut(v)); if (v >= 1) pSet = 0; }
     }
     if (mode === 'dive') {
+      // 응집: 그래프는 물러나고(노드 입자는 drawGP가 그린다) 1초 뒤 코어가 점화되며 월드로 넘어간다
       const t = now - dv.t0;
-      cyw = Math.cos(st.yaw); syw = Math.sin(st.yaw); cp = Math.cos(st.pitch); sp = Math.sin(st.pitch);
-      const r3 = rotOnly(G.nodes[dv.i].p), kf = Math.min(1, dt * 0.007);
-      cam.fx += (r3[0] - cam.fx) * kf; cam.fy += (r3[1] - cam.fy) * kf;
-      dv.zmax = r3[2] + F - 0.2; cam.z = eIn(clamp((t - 420) / 950, 0, 1)) * dv.zmax;
-      fB = 1 - clamp((t - 1080) / 260, 0, 1);
-      if (t > 1100 && !flash) flash = { t0: now, in: true, dur: 260, color: G.nodes[dv.i].color, c: [sx[D + dv.i], sy[D + dv.i]] };
-      if (t > 1360) { world = buildWorld(dv.i); wT0 = now; mode = 'world'; const C = wCenter(); flash = { t0: now, in: false, dur: 700, color: world.color, c: [C[0], C[1]] }; cb.onWorld(dv.i, world.focus); }
+      fB = 1 - eIO(clamp((t - 80) / 650, 0, 1));
+      if (t > 1000 + ANT) {
+        world = dv.w; world.asm = true; wT0 = now; mode = 'world';
+        if (GP) {   // 행성별 입자 도착 시각 → 도착할 때마다 링이 하나씩 늘어난다
+          GP.phase = 'asm'; GP.t0 = now; GP.arr = {};
+          GP.parts.forEach((q) => { if (q.k >= 0) (GP.arr[q.k] = GP.arr[q.k] || []).push(250 + q.k * 110 + q.dl * 0.5 + 600); });
+        }
+        cb.onWorld(dv.i, world.focus);
+      }
     } else if (mode === 'rise') {
       const t = now - dv.t0;
-      cam.z = (1 - eOut(clamp((t - 180) / 1050, 0, 1))) * dv.zmax;
-      fB = clamp((t - 120) / 650, 0, 1); aW = 1 - clamp(t / 380, 0, 1); gW = 1 - clamp(t / 380, 0, 1);
-      if (t > 1260) { mode = 'main'; cam.z = 0; cam.fx = 0; cam.fy = 0; dv = null; world = null; st.tYaw = null; st.tPitch = null; mainT0 = now - 900; cb.onBack(); }
+      cam.z = 0;
+      fB = clamp((t - 450) / 750, 0, 1); aW = 1 - clamp(t / 450, 0, 1); gW = aW;   // 행성이 코어로 모인 뒤 노드로 흩어지며 그래프가 돌아온다
+      if (t > 1350) { mode = 'main'; cam.z = 0; cam.fx = 0; cam.fy = 0; dv = null; world = null; st.tYaw = null; st.tPitch = null; mainT0 = now - 900; cb.onBack(); }
     } else if (mode === 'szoom') {
       const u = now - zm.t0, Cc = wCenter(); fB = 0;
       if (zm.dir === 'in') {
@@ -1190,6 +1287,7 @@ function createEngine(cv, opt, cb) {
       if (fB > 0.002) drawBrain(now, dt, fB);
       dropStep(now);
       drawWorld(now, dt, aW, gW);
+      if (GP) drawGP(now);
       drawFlash(now);
     }
   }
