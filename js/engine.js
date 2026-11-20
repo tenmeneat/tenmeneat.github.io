@@ -688,7 +688,9 @@ function createEngine(cv, opt, cb) {
   // 노트 행성 선택(강조 링 + 패널 카드 강조)
   function pick(j) { if (mode !== 'world' || !world) return; world.pick = world.pick === j ? null : j; cb.onNote(world.pick); }
   // 섹션 행성 클릭 → 그 행성으로 줌인 → 행성 안의 세계(노트 행성들)
-  const ZMAX = 16; let zm = null;
+  let zm = null;
+  // 포털 전환 상태: pz = 진입 중 정보, pE = 띠가 세로 동심원으로 일어선 정도(0~1), pS = 화면 배율, pSet = 다음 세계에서 띠가 다시 눕는 시작 시각
+  let pz = null, pE = 0, pS = 1, pSet = 0;
   function enterSection(key) {
     if (mode !== 'world' || warp || !world || !world.project || world.sec) return;
     const k = world.planets.findIndex((p) => p.act.sec === key); if (k < 0) return;
@@ -696,11 +698,8 @@ function createEngine(cv, opt, cb) {
     if (cb.onZoom) cb.onZoom();
   }
   function exitSection() {
-    const par = world.parent, k = par.planets.findIndex((p) => p.act.sec === world.sec), now = performance.now(), C = wCenter();
-    world = par; wT0 = par.wT0; st.wyaw = 0; st.wpitch = 0; wHover = -1;
-    zm = { dir: 'out', k: Math.max(0, k), t0: now }; mode = 'szoom';
-    flash = { t0: now, in: false, dur: 700, color: world.color, c: [C[0], C[1]] };
-    cb.onSec(null);
+    const par = world.parent, k = par.planets.findIndex((p) => p.act.sec === world.sec);
+    zm = { dir: 'out', k: Math.max(0, k), t0: performance.now(), par: par }; mode = 'szoom'; wHover = -1; pSet = 0; cv.style.cursor = 'default';
   }
   function travel(i) {
     if (mode !== 'world' || warp || !world || i < 0) return;
@@ -734,7 +733,7 @@ function createEngine(cv, opt, cb) {
   ], rv = [0, 0, 0];
   // ref: 금빛 고리(가는 동심 가닥 다발) + 금가루 + 수직 광선 + 떨어지는 불티
   const CR = mkRng(77);
-  const BAND = Array.from({ length: 11 }, (_, k) => ({ r: 0.98 + k * 0.021 + (CR() - 0.5) * 0.008, a: 0.25 + 0.75 * Math.pow(CR(), 0.7) * (1 - Math.abs(k - 4) / 8), w: 0.5 + 0.5 * CR() }));
+  const BAND = Array.from({ length: 11 }, (_, k) => ({ rT: 0.34 + k * 0.125, r: 0.98 + k * 0.021 + (CR() - 0.5) * 0.008, a: 0.25 + 0.75 * Math.pow(CR(), 0.7) * (1 - Math.abs(k - 4) / 8), w: 0.5 + 0.5 * CR() }));
   const DUST = Array.from({ length: 260 }, () => { const g = (CR() + CR() + CR() - 1.5) / 1.5; return { r: 1.09 + g * 0.2, y: (CR() - 0.5) * 0.06 * (1 + Math.abs(g) * 2), a0: CR() * TAU, w: 0.00006 + 0.00008 * CR(), s: 0.7 + CR() * 1.1, ph: CR() * TAU }; });
   const SHELL = Array.from({ length: 220 }, (_, i) => fibDir(i, 220));
   const RAIN = Array.from({ length: 34 }, () => ({ x: (CR() - 0.5) * 0.26, z: (CR() - 0.5) * 0.26, off: CR(), v: 0.00005 + CR() * 0.00006, len: 0.04 + CR() * 0.09 }));
@@ -754,20 +753,36 @@ function createEngine(cv, opt, cb) {
         if (k && (qz + tmp[2] > 0) === front) { P.moveTo(qx, qy); P.lineTo(tmp[0], tmp[1]); }
         qx = tmp[0]; qy = tmp[1]; qz = tmp[2];
       }
-      ctx.strokeStyle = front ? GOLD_L : GOLD_D; ctx.lineWidth = R.w * (front ? 1 : 0.8); ctx.globalAlpha = (front ? 0.6 : 0.45) * a; ctx.stroke(P);
+      ctx.strokeStyle = front ? GOLD_L : GOLD_D; ctx.lineWidth = R.w * (front ? 1 : 0.8); ctx.globalAlpha = (front ? 0.6 : 0.45) * a * (1 - pE); ctx.stroke(P);
     });
     ctx.lineCap = 'butt';
     ctx.globalCompositeOperation = 'lighter';
     if (!front) drawBeam(now, el, a, C);
     drawStrands(now, el, a, C, front);
     drawDust(now, el, a, C, front);
-    if (front) drawRain(now, el, a, C);
+    if (front) { drawRain(now, el, a, C); drawGround(a, C); }
     ctx.globalCompositeOperation = 'source-over';
+  }
+  // 포털 변형: 수평 띠(xz 평면)의 점을 화면을 마주보는 동심원(반지름 rT)으로 일으켜 세운다
+  function bandPt(t, r, y, rT, C, out) {
+    rv[0] = Math.cos(t) * r; rv[1] = y; rv[2] = Math.sin(t) * r; wr(rv, 1, C, out);
+    if (pE <= 0) return out;
+    const cx_ = Math.cos(t) * wcy_ + Math.sin(t) * wsy_, cz_ = Math.sin(t) * wcy_ - Math.cos(t) * wsy_;   // 회전 후 같은 각도 자리를 유지해 비틀림 없이 일어선다
+    out[0] += (C[0] + cx_ * rT * C[2] - out[0]) * pE; out[1] += (C[1] + cz_ * rT * C[2] - out[1]) * pE; out[2] = out[2] * (1 - pE) + pE * 0.6; return out;
+  }
+  // 광선이 닿는 바닥의 빛 고리(ref: 포털 아래 수평 원반)
+  function drawGround(a, C) {
+    if (pE <= 0.01) return;
+    wr([0, -1.75, 0], 1, C, tmp); const rx = C[2] * 1.15 * pE, ry = rx * 0.13, g = pE * a;
+    ctx.globalAlpha = 0.5 * g; ctx.drawImage(sprite(GOLD_L), tmp[0] - rx, tmp[1] - ry * 2.5, rx * 2, ry * 5);
+    ctx.strokeStyle = GOLD_L; ctx.lineWidth = 0.8;
+    [1, 0.72, 0.45].forEach((s, i) => { ctx.globalAlpha = (0.6 - i * 0.15) * g; ctx.beginPath(); ctx.ellipse(tmp[0], tmp[1], rx * s, ry * s, 0, 0, TAU); ctx.stroke(); });
+    const z = C[2] * 0.45; ctx.globalAlpha = 0.9 * g; ctx.drawImage(sprite(GOLD_L), tmp[0] - z / 2, tmp[1] - z / 2, z, z);
   }
   // 수직 광선(극축): 중심이 가장 밝고 양끝으로 사라진다
   function drawBeam(now, el, a, C) {
-    const g = eOut(clamp((el - 250) / 1400, 0, 1)) * a; if (g <= 0.01) return;
-    const L = 2.6 * g; wr([0, -L, 0], 1, C, tmp); wr([0, L, 0], 1, C, tmp2);
+    let g = eOut(clamp((el - 250) / 1400, 0, 1)) * a; if (g <= 0.01) return;
+    const L = 2.6 * g + 3.5 * pE; g *= 1 + 0.8 * pE; wr([0, -L, 0], 1, C, tmp); wr([0, L, 0], 1, C, tmp2);
     const lg = ctx.createLinearGradient(tmp[0], tmp[1], tmp2[0], tmp2[1]);
     lg.addColorStop(0, 'rgba(244,222,170,0)'); lg.addColorStop(0.5, 'rgba(244,222,170,1)'); lg.addColorStop(1, 'rgba(244,222,170,0)');
     ctx.strokeStyle = lg; ctx.beginPath(); ctx.moveTo(tmp[0], tmp[1]); ctx.lineTo(tmp2[0], tmp2[1]);
@@ -781,7 +796,7 @@ function createEngine(cv, opt, cb) {
     BAND.forEach((B) => {
       const P = new Path2D(); let qx = 0, qy = 0, qz = 0;
       for (let k = 0; k <= N; k++) {
-        const t = t0 + (k / N) * g * TAU; rv[0] = Math.cos(t) * B.r; rv[1] = 0; rv[2] = Math.sin(t) * B.r; wr(rv, 1, C, tmp);
+        bandPt(t0 + (k / N) * g * TAU, B.r, 0, B.rT, C, tmp);
         if (k && (qz + tmp[2] > 0) === front) { P.moveTo(qx, qy); P.lineTo(tmp[0], tmp[1]); }
         qx = tmp[0]; qy = tmp[1]; qz = tmp[2];
       }
@@ -790,12 +805,12 @@ function createEngine(cv, opt, cb) {
     const T = new Path2D();
     for (let k = 0; k < 72; k++) {
       const t = k / 72 * TAU; if ((((t - t0) % TAU) + TAU) % TAU > g * TAU) continue;
-      rv[0] = Math.cos(t) * 1.22; rv[1] = 0; rv[2] = Math.sin(t) * 1.22; wr(rv, 1, C, tmp); if ((tmp[2] > 0) !== front) continue;
-      const r2 = k % 6 ? 1.25 : 1.3; rv[0] = Math.cos(t) * r2; rv[2] = Math.sin(t) * r2; wr(rv, 1, C, tmp2); T.moveTo(tmp[0], tmp[1]); T.lineTo(tmp2[0], tmp2[1]);
+      bandPt(t, 1.22, 0, 1.76, C, tmp); if ((tmp[2] > 0) !== front) continue;
+      const r2 = k % 6 ? 1.25 : 1.3; bandPt(t, r2, 0, r2 + 0.54, C, tmp2); T.moveTo(tmp[0], tmp[1]); T.lineTo(tmp2[0], tmp2[1]);
     }
     ctx.strokeStyle = GOLD; ctx.lineWidth = 0.7; ctx.globalAlpha = (front ? 0.5 : 0.3) * a; ctx.stroke(T);
     // 화면상 광선과 띠가 겹치는 점(회전 후 x = 0)
-    const fa = clamp((el - 1300) / 800, 0, 1) * a; if (fa <= 0.01) return;
+    const fa = clamp((el - 1300) / 800, 0, 1) * a * (1 - pE); if (fa <= 0.01) return;
     const t1 = Math.atan2(-wcy_, wsy_);
     [t1, t1 + Math.PI].forEach((t) => {
       rv[0] = Math.cos(t) * 1.08; rv[1] = 0; rv[2] = Math.sin(t) * 1.08; wr(rv, 1, C, tmp); if ((tmp[2] > 0) !== front) return;
@@ -808,7 +823,7 @@ function createEngine(cv, opt, cb) {
     const g = clamp((el - 700) / 1200, 0, 1) * a; if (g <= 0.01) return;
     ctx.fillStyle = front ? GOLD_L : GOLD;
     DUST.forEach((d) => {
-      const th = d.a0 + now * d.w; rv[0] = Math.cos(th) * d.r; rv[1] = d.y; rv[2] = Math.sin(th) * d.r; wr(rv, 1, C, tmp);
+      bandPt(d.a0 + now * d.w, d.r, d.y, clamp(0.3 + (d.r - 0.85) * 2.8, 0.25, 1.8), C, tmp);
       if ((tmp[2] > 0) !== front) return;
       const tw = 0.5 + 0.5 * Math.sin(now * 0.0021 + d.ph), s = d.s * tmp[3];
       ctx.globalAlpha = (0.2 + 0.8 * tw * tw) * (front ? 0.9 : 0.4) * g; ctx.fillRect(tmp[0] - s / 2, tmp[1] - s / 2, s, s);
@@ -830,7 +845,10 @@ function createEngine(cv, opt, cb) {
     ctx.globalCompositeOperation = 'lighter';
     const halo = C[2] * 3; ctx.globalAlpha = 0.2 * g; ctx.drawImage(sprite(world.color), C[0] - halo / 2, C[1] - halo / 2, halo, halo);
     const gl = C[2] * 0.95 * (1 + 0.04 * Math.sin(now / 700)); ctx.globalAlpha = 0.55 * g; ctx.drawImage(sprite(world.color), C[0] - gl / 2, C[1] - gl / 2, gl, gl);
-    const sa = now * 0.00025, cs = Math.cos(sa), sn = Math.sin(sa), R = 0.3 * g, BK = new Path2D(), FR = new Path2D();
+    // 광신호 도착: 코어가 한 번 크게 타오른다
+    const fl = pz ? Math.sin(Math.PI * clamp((pz.u - 550) / 800, 0, 1)) : 0;
+    if (fl > 0.01) { const z = C[2] * (0.5 + 1.8 * fl); ctx.globalAlpha = fl; ctx.drawImage(sprite(GOLD_L), C[0] - z / 2, C[1] - z / 2, z, z); }
+    const sa = now * 0.00025, cs = Math.cos(sa), sn = Math.sin(sa), R = 0.3 * g * (1 - 0.5 * pE), BK = new Path2D(), FR = new Path2D();
     SHELL.forEach((v) => {
       rv[0] = (v[0] * cs + v[2] * sn) * R; rv[1] = v[1] * R; rv[2] = (-v[0] * sn + v[2] * cs) * R; wr(rv, 1, C, tmp);
       const s = 1.3 * tmp[3]; (tmp[2] > 0 ? FR : BK).rect(tmp[0] - s / 2, tmp[1] - s / 2, s, s);
@@ -873,7 +891,7 @@ function createEngine(cv, opt, cb) {
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = p.ringC; ctx.lineWidth = hl ? 1 : 0.8; ctx.globalAlpha = (hl ? 1 : 0.8) * a; ctx.stroke(FR); bead(true);
   }
-  function drawWorld(now, dt, aW, gW, zt) {
+  function drawWorld(now, dt, aW, gW) {
     if (!world || aW <= 0.002) return;
     const C = wCenter(), mob = W < 760, el = now - wT0;
     wcy_ = Math.cos(now * 0.00008 + st.wyaw); wsy_ = Math.sin(now * 0.00008 + st.wyaw); wcp_ = Math.cos(0.3 + st.wpitch); wsp_ = Math.sin(0.3 + st.wpitch);
@@ -886,12 +904,15 @@ function createEngine(cv, opt, cb) {
       p.sr = C[2] * (mob ? 0.26 : 0.22) * p.rad * s * (0.6 + 0.4 * p.pa);
     });
     // 줌인/아웃: 선택한 행성이 화면 중심(세계 중심)으로 이동하며 확대된다. 라벨은 확대되는 동안 숨긴다
-    if (zt) { const A = world.planets[zt.k]; ctx.save(); ctx.translate(A.sx + (C[0] - A.sx) * zt.e, A.sy + (C[1] - A.sy) * zt.e); ctx.scale(zt.s, zt.s); ctx.translate(-A.sx, -A.sy); }
-    const lbl = zt ? clamp(1 - (zt.s - 1) / 1.5, 0, 1) : 1;
+    if (pS !== 1) { ctx.save(); ctx.translate(C[0], C[1]); ctx.scale(pS, pS); ctx.translate(-C[0], -C[1]); }   // 포털 통과
+    const lbl = pz ? clamp(1 - pz.u / 250, 0, 1) : 1 - pE;
     const drawP = (front) => {
       world.planets.forEach((p, k) => {
         if ((p.z >= 0) !== front || p.pa <= 0.01) return;
-        const a = p.pa * (0.55 + 0.45 * clamp((p.z + Ro) / (2 * Ro), 0, 1)), focus = (world.focus && p.act.sec === world.focus) || (p.act.note !== undefined && world.pick === p.act.note), hv = k === wHover;
+        let a = p.pa * (0.55 + 0.45 * clamp((p.z + Ro) / (2 * Ro), 0, 1));
+        if (pz) a *= k === pz.k ? 1 - 0.9 * clamp((pz.u - 550) / 500, 0, 1) : 1 - eIO(clamp((pz.u - 150) / 750, 0, 1));   // 포털: 누른 행성만 남고 나머지는 물러난다
+        if (a <= 0.01) return;
+        const focus = (world.focus && p.act.sec === world.focus) || (p.act.note !== undefined && world.pick === p.act.note), hv = k === wHover;
         // 오러리 암: 코어 가장자리에서 행성까지 곧은 금선
         const dx = p.sx - C[0], dy = p.sy - C[1], dd = Math.hypot(dx, dy), r0 = C[2] * 1.12;
         if (dd > r0 + p.sr) { ctx.strokeStyle = GOLD_D; ctx.lineWidth = 0.8; ctx.globalAlpha = (focus || hv ? 0.9 : 0.5) * a; ctx.beginPath(); ctx.moveTo(C[0] + dx / dd * r0, C[1] + dy / dd * r0); ctx.lineTo(p.sx - dx / dd * p.sr, p.sy - dy / dd * p.sr); ctx.stroke(); }
@@ -920,7 +941,7 @@ function createEngine(cv, opt, cb) {
       orb(ta, ep); OD[f].moveTo(ep[0], ep[1]); orb(tb, ep); OD[f].lineTo(ep[0], ep[1]);
       if (ord) { const ua = (((ta - th0) % TAU) + TAU) % TAU; if (ua + TAU / 140 <= arcEnd + 1e-6) { orb(ta, ep); OA[f].moveTo(ep[0], ep[1]); orb(tb, ep); OA[f].lineTo(ep[0], ep[1]); } }
     }
-    const oA = aW * clamp((el - 300) / 800, 0, 1), aA = aW * clamp((el - 900) / 900, 0, 1);
+    const oA = aW * clamp((el - 300) / 800, 0, 1) * (1 - pE), aA = aW * clamp((el - 900) / 900, 0, 1) * (1 - pE);
     const drawOrbit = (f) => {
       ctx.setLineDash([1.2, 7]); ctx.strokeStyle = world.light; ctx.lineWidth = 1; ctx.globalAlpha = 0.22 * oA; ctx.stroke(OD[f]); ctx.setLineDash([]);
       if (ord) { ctx.strokeStyle = GOLD_L; ctx.lineWidth = 1; ctx.globalAlpha = (f ? 0.45 : 0.25) * aA; ctx.stroke(OA[f]); }
@@ -935,7 +956,21 @@ function createEngine(cv, opt, cb) {
     // 순서 호를 따라 흐르는 빛(01 → 마지막)
     if (ord && aA > 0.01) { const u = (now * 0.00012) % 1; orb(th0 + u * arcEnd, ep); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.sin(Math.PI * u) * aA; ctx.drawImage(sprite(world.color), ep[0] - 7, ep[1] - 7, 14, 14); ctx.globalCompositeOperation = 'source-over'; }
     drawP(true);
-    if (zt) ctx.restore();
+    // 광신호: 누른 행성에서 암을 따라 코어로 빨려 들어가는 빛(가속)
+    if (pz && pz.sig < 1) {
+      const P = world.planets[pz.k], hx = P.sx + (C[0] - P.sx) * pz.sig, hy = P.sy + (C[1] - P.sy) * pz.sig;
+      ctx.globalCompositeOperation = 'lighter';
+      const df = 1 - clamp(pz.u / 500, 0, 1), dz = P.sr * (3 + 5 * (1 - df)); ctx.globalAlpha = 0.9 * df; ctx.drawImage(sprite(P.color), P.sx - dz / 2, P.sy - dz / 2, dz, dz);
+      ctx.strokeStyle = GOLD_L; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.7; ctx.beginPath(); ctx.moveTo(P.sx, P.sy); ctx.lineTo(hx, hy); ctx.stroke();
+      for (let j = 0; j < 10; j++) {
+        const q = pz.rev ? pz.sig + j * 0.03 : pz.sig - j * 0.03; if (q < 0 || q > 1) break;   // 꼬리는 진행 방향 뒤쪽
+        const x = P.sx + (C[0] - P.sx) * q, y = P.sy + (C[1] - P.sy) * q, z = (j ? 18 : 32) * (1 - j / 12);
+        ctx.globalAlpha = 0.9 * (1 - j / 10); ctx.drawImage(sprite(j ? world.color : GOLD_L), x - z / 2, y - z / 2, z, z);
+      }
+      ctx.globalAlpha = 1; ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(hx, hy, 2.2, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    if (pS !== 1) ctx.restore();
     ctx.globalAlpha = 1;
   }
   function drawFlash(now) {
@@ -960,7 +995,11 @@ function createEngine(cv, opt, cb) {
     const lk = Math.min(1, dt * 0.004); cx += (tg[0] - cx) * lk; cy += (tg[1] - cy) * lk;
     const par = mode === 'main' && st.mx > -999 && !st.drag;
     px += ((par ? (st.mx - W / 2) * -0.012 : 0) - px) * 0.05; py += ((par ? (st.my - H / 2) * -0.012 : 0) - py) * 0.05;
-    let fB = 1, aW = 0, gW = 1, zt = null;
+    let fB = 1, aW = 0, gW = 1;
+    if (mode !== 'szoom') {   // 다음 세계: 세로 동심원으로 선 채 들어와 다시 수평 띠로 눕는다
+      pz = null; pE = 0; pS = 1;
+      if (pSet) { const v = clamp((now - pSet) / 1300, 0, 1); pE = 1 - eIO(v); pS = 1 + 0.5 * (1 - eOut(v)); if (v >= 1) pSet = 0; }
+    }
     if (mode === 'dive') {
       const t = now - dv.t0;
       cyw = Math.cos(st.yaw); syw = Math.sin(st.yaw); cp = Math.cos(st.pitch); sp = Math.sin(st.pitch);
@@ -977,19 +1016,32 @@ function createEngine(cv, opt, cb) {
       if (t > 1260) { mode = 'main'; cam.z = 0; cam.fx = 0; cam.fy = 0; dv = null; world = null; st.tYaw = null; st.tPitch = null; mainT0 = now - 900; cb.onBack(); }
     } else if (mode === 'szoom') {
       const u = now - zm.t0, Cc = wCenter(); fB = 0;
-      const e = zm.dir === 'in' ? eIn(clamp(u / 950, 0, 1)) : 1 - eOut(clamp(u / 950, 0, 1));   // 0 = 평상시, 1 = 행성이 화면을 가득 채움
-      zt = { k: zm.k, s: 1 + e * ZMAX, e: e };
       if (zm.dir === 'in') {
-        aW = 1 - clamp((u - 620) / 330, 0, 1); gW = aW;
-        if (u > 700 && !flash) flash = { t0: now, in: true, dur: 260, color: world.color, c: [Cc[0], Cc[1]] };
-        if (u > 960) {
+        // 포털: 행성 → 광신호 → 코어 점화 → 띠가 세로 동심원으로 일어섬(ref: 수직 광선 + 동심원 포털) → 통과
+        pz = { k: zm.k, u: u, sig: eIn(clamp(u / 650, 0, 1)) };
+        pE = eIO(clamp((u - 600) / 950, 0, 1)); pS = 1 + 5 * eIn(clamp((u - 1450) / 550, 0, 1)); pSet = 0;
+        aW = 1 - clamp((u - 1780) / 220, 0, 1); gW = aW;
+        if (u > 1700 && !flash) flash = { t0: now, in: true, dur: 300, color: world.color, c: [Cc[0], Cc[1]] };
+        if (u > 2010) {
           const par = world, s = par.project.sections.find((x) => x.key === zm.key); par.wT0 = wT0;
-          world = buildWorld(par.i, sectionWorld(par, s)); wT0 = now; zt = null; zm = null; aW = 1; gW = 1; mode = 'world';
+          world = buildWorld(par.i, sectionWorld(par, s)); wT0 = now; zm = null; aW = 1; gW = 1; mode = 'world';
+          pz = null; pE = 1; pS = 1.5; pSet = now;
           flash = { t0: now, in: false, dur: 700, color: world.color, c: [Cc[0], Cc[1]] }; cb.onSec(world.sec);
         }
       } else {
-        aW = clamp(u / 300, 0, 1); gW = aW;
-        if (u > 950) { zt = null; zm = null; aW = 1; gW = 1; mode = 'world'; }
+        // 역재생: ① 이 세계의 띠가 포털로 일어서며 물러남(정착의 반대) → ② 상위 세계에서 진입 연출을 거꾸로(포털이 눕고 광신호가 행성으로 돌아감)
+        if (u < 1300) {
+          const w = u / 1300; pz = null; pE = eIO(w); pS = 1 + 0.5 * eIn(w);
+          aW = 1 - clamp((u - 1100) / 200, 0, 1); gW = aW;
+          if (u > 1050 && !flash) flash = { t0: now, in: true, dur: 250, color: world.color, c: [Cc[0], Cc[1]] };
+        } else {
+          if (world !== zm.par) { world = zm.par; wT0 = world.wT0; st.wyaw = 0; st.wpitch = 0; flash = { t0: now, in: false, dur: 700, color: world.color, c: [Cc[0], Cc[1]] }; cb.onSec(null); }
+          const f = 2010 - (u - 1300);
+          pz = { k: zm.k, u: f, sig: eIn(clamp(f / 650, 0, 1)), rev: true };
+          pE = eIO(clamp((f - 600) / 950, 0, 1)); pS = 1 + 5 * eIn(clamp((f - 1450) / 550, 0, 1));
+          aW = 1 - clamp((f - 1780) / 220, 0, 1); gW = aW;
+          if (f <= 0) { zm = null; pz = null; pE = 0; pS = 1; aW = 1; gW = 1; mode = 'world'; }
+        }
       }
     } else if (mode === 'world') {
       fB = 0; aW = 1;
@@ -1021,7 +1073,7 @@ function createEngine(cv, opt, cb) {
         if (h !== wHover) { wHover = h; cv.style.cursor = h >= 0 ? 'pointer' : 'grab'; }
       }
       if (fB > 0.002) drawBrain(now, dt, fB);
-      drawWorld(now, dt, aW, gW, zt);
+      drawWorld(now, dt, aW, gW);
       drawFlash(now);
     }
   }
