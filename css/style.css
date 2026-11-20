@@ -87,14 +87,35 @@ html.boot .hdr, html.boot .hero-copy, html.boot .legend, html.boot .cue { opacit
 @keyframes wfade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .wback { position: absolute; top: 88px; left: 36px; gap: 10px; padding: 0 18px 0 14px; background: rgba(8,10,18,0.6); border-color: rgba(255,255,255,0.16); color: var(--ink-2); pointer-events: auto; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .back-t { font-family: var(--body); font-style: normal; font-size: 13.5px; font-weight: 500; line-height: 1; }
-.wpanel { position: absolute; left: 36px; top: 148px; bottom: 32px; width: 430px; overflow: auto; padding: 28px 28px 32px; border-radius: 22px; background: rgba(7,9,16,0.62); border: 1px solid rgba(255,255,255,0.08); pointer-events: auto; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
-.wpanel::-webkit-scrollbar { width: 6px; } .wpanel::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 3px; }
+/* 패널(A안): 카드 상자 없이 배경 위 타이포. 왼쪽 가장자리의 옅은 어둠만 깔아 읽히게 한다 */
+.world::before { content: ''; position: absolute; inset: 0 auto 0 0; width: min(620px, 52vw); background: linear-gradient(90deg, rgba(3,4,9,.78) 0%, rgba(3,4,9,.5) 55%, rgba(3,4,9,0) 100%); pointer-events: none; }
+.wpanel { position: absolute; left: 32px; top: 156px; bottom: 32px; width: 396px; overflow: auto; padding: 8px 12px 8px 16px; pointer-events: auto; scrollbar-width: none; display: flex; flex-direction: column; }
+.wpanel::-webkit-scrollbar { display: none; }
+.wmeta { margin: 14px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.wmeta i { font-style: normal; margin: 0 8px; color: var(--faint); }
+.wlink { align-self: flex-start; display: inline-flex; gap: 6px; margin: 18px 0 0; padding: 0 0 4px; font-size: 13px; font-weight: 500; color: var(--ink); text-decoration: none; background: linear-gradient(currentColor, currentColor) 0 100% / 100% 1px no-repeat; transition: background-size .35s ease, color .2s ease; }
+.wlink:hover { background-size: 0 1px; background-position: 100% 100%; }
+.wlink span { transition: transform .25s ease; } .wlink:hover span { transform: translateX(4px); }
+.widx { list-style: none; margin: 30px 0 0; padding: 0; border-top: 1px solid rgba(255,255,255,.08); }
+.wrow { position: relative; display: flex; align-items: baseline; gap: 14px; width: 100%; padding: 9px 0; border: 0; background: none; text-align: left; font-size: 13.5px; color: var(--muted); transition: color .2s ease, padding .25s ease; }
+.wrow::before { content: ''; position: absolute; left: -14px; top: 50%; width: 2px; height: 0; background: var(--c); transform: translateY(-50%); transition: height .25s ease; }
+.wrow .no { width: 20px; flex: none; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--c); opacity: .75; }
+.wrow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wrow .ct { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--faint); }
+.wrow:hover, .wrow.hl, .wrow.on { color: var(--ink); padding-left: 6px; }
+.wrow:hover::before, .wrow.hl::before, .wrow.on::before { height: 60%; }
+.wfoot { margin-top: auto; padding-top: 28px; }
+.wtags { margin: 6px 0 0; font-size: 12px; line-height: 1.9; color: var(--faint); }
+.wtags .tl { margin-right: 10px; font-family: var(--sc); font-size: 11.5px; letter-spacing: .12em; color: var(--muted); }
+.wtags button { padding: 0; border: 0; background: none; font: inherit; color: var(--muted); transition: color .2s ease; }
+.wtags button + button::before { content: '·'; margin: 0 7px; color: var(--faint); }
+.wtags button:hover { color: var(--ink); }
 .wk { margin: 0; display: flex; align-items: center; gap: 10px; font-family: var(--sc); font-weight: 500; font-size: 14px; letter-spacing: .1em; line-height: 1.1; }
 .wk .dot { width: 8px; height: 8px; }
 .wk .kd { font-family: var(--body); font-size: 13px; letter-spacing: 0.02em; color: var(--muted); }
 .wscript { margin: 10px 0 0; font-family: var(--script); font-style: var(--script-style); font-size: calc(var(--k) * 64px); line-height: 1.02; color: var(--ink); }
-.wtitle { margin: 12px 0 0; font-size: 21px; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; color: var(--ink); }
-.wsum { margin: 12px 0 0; font-size: 14px; line-height: 1.75; color: #B3BBCD; }
+.wtitle { margin: 10px 0 0; font-size: 17px; font-weight: 400; line-height: 1.45; letter-spacing: -0.01em; color: #D5DBE8; }
+.wsum { margin: 14px 0 0; max-width: 36ch; font-size: 13.5px; line-height: 1.75; color: #9AA3B8; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .meta { margin: 20px 0 0; }
 .meta div { display: flex; justify-content: space-between; gap: 18px; padding: 11px 0; border-top: 1px solid rgba(255,255,255,0.07); font-size: 13px; }
 .meta dt { flex: none; font-family: var(--sc); font-weight: 500; font-size: 12.5px; letter-spacing: .1em; line-height: 1.55; color: var(--muted); }
@@ -374,7 +395,9 @@ html.s-on { overflow: hidden; }
   .hero-copy .stats dd { font-size: 22px; }
   .stats { gap: 22px; }
   .wback { top: 76px; left: 14px; }
-  .wpanel { left: 10px; right: 10px; top: auto; bottom: 10px; width: auto; max-height: 52%; padding: 20px; }
+  .world::before { inset: auto 0 0 0; width: auto; height: 62%; background: linear-gradient(0deg, rgba(3,4,9,.9) 0%, rgba(3,4,9,.7) 60%, rgba(3,4,9,0) 100%); }
+  .wpanel { left: 20px; right: 20px; top: auto; bottom: 16px; width: auto; max-height: 50%; padding: 0 0 0 14px; }
+  .wfoot { display: none; }
   .sec { padding-left: 20px; padding-right: 20px; }
   .about-grid { grid-template-columns: minmax(0, 1fr); }
   .proj-grid, .aw-list { grid-template-columns: minmax(0, 1fr); }

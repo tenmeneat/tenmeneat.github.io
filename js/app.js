@@ -39,10 +39,13 @@
   const readLink = (j, t) => '<a class="pill rd-open" href="#/note/' + encodeURIComponent(G.nodes[j].name) + '">' + t + ' →</a>';
   function metaHtml(rows) { return '<dl class="meta">' + rows.map((m) => '<div><dt>' + esc(m.k) + '</dt><dd>' + esc(m.v) + '</dd></div>').join('') + '</dl>'; }
   const noteName = (j) => G.nodes[j].name.replace(/^[^-\s]+-/, '');
-  function noteCards(ids, color) {
-    return '<div class="ncards">' + ids.map((j) => { const nd = G.nodes[j];
-      return '<button type="button" class="ncard' + (state.note === j ? ' on' : '') + '" data-note="' + j + '" style="--c:' + color + '"><span class="nt">' + esc(noteName(j)) + '</span>' + (nd.summary ? '<span class="ns">' + esc(nd.summary) + '</span>' : '') + '<span class="nl">링크 ' + G.adj[j].size + '</span></button>'; }).join('') + '</div>';
-  }
+  // 프로젝트 월드 패널(A안): 상자 없이 배경 위에 타이포만. 목록은 행성과 hover 연동되는 인덱스
+  const fmtPeriod = (s) => (s || '').replace(/(\d{4})-(\d{2})-\d{2}/g, '$1.$2').replace(/\s*~\s*/, ' — ');
+  const metaLine = (a) => '<p class="wmeta">' + a.filter(Boolean).map(esc).join('<i aria-hidden="true">·</i>') + '</p>';
+  const wlink = (j, t) => '<a class="wlink rd-open" href="#/note/' + encodeURIComponent(G.nodes[j].name) + '">' + t + ' <span aria-hidden="true">→</span></a>';
+  const idx = (rows, color) => '<ol class="widx" style="--c:' + color + '">' + rows.map((r) => '<li><button type="button" class="wrow' + (r.on ? ' on' : '') + '" ' + r.attr + '><span class="no">' + r.no + '</span><span class="nm">' + esc(r.nm) + '</span><span class="ct">' + r.ct + '</span></button></li>').join('') + '</ol>';
+  const noteIdx = (ids, color) => idx(ids.map((j, k) => ({ attr: 'data-note="' + j + '"', no: String(k + 1).padStart(2, '0'), nm: noteName(j), ct: G.adj[j].size, on: state.note === j })), color);
+  const tagLine = (label, ms) => ms.length ? '<p class="wtags"><span class="tl">' + label + '</span>' + ms.map((m) => '<button type="button" data-go="' + m.i + '">' + esc(m.name) + '</button>').join('') + '</p>' : '';
   function worldHtml() {
     const i = state.world; if (i < 0) return { html: '', hint: '' };
     const n = G.nodes[i], w = worldOf(i);
@@ -58,24 +61,21 @@
       const dot = '<span class="dot" aria-hidden="true" style="background:' + p.color + ';box-shadow:0 0 12px ' + p.color + '"></span>';
       const sec = state.section && p.sections.find((s) => s.key === state.section);
       if (sec) {   // 섹션 행성 안: 그 섹션의 노트들이 행성이다
-        let s = '<p class="wk" style="color:' + p.color + '">' + dot + 'Section world<span class="kd">' + esc(p.label) + '</span></p>';
-        s += '<p class="wscript">' + esc(sec.no) + '</p><h2 class="wtitle">' + esc(sec.name) + '</h2>';
-        s += '<p class="wsum">' + esc(moc.title || moc.name) + '의 한 섹션입니다. 행성 하나가 노트 하나예요.</p>';
-        s += metaHtml([{ k: 'Project', v: p.label }, { k: 'Notes', v: String(sec.ids.length) }]);
-        s += '<p class="sub">Notes in this world</p>' + noteCards(sec.ids, p.color);
+        let s = '<p class="wk" style="color:' + p.color + '">' + dot + 'Section ' + esc(sec.no) + '</p>';
+        s += '<p class="wscript">' + esc(p.label) + '</p><h2 class="wtitle">' + esc(sec.name) + '</h2>';
+        s += metaLine([moc.title || moc.name, '노트 ' + sec.ids.length]);
+        s += noteIdx(sec.ids, p.color);
         return { html: s, hint: 'Click a planet to read its note', label: p.label + ' · ' + sec.name, back: p.label };
       }
       let h = '<p class="wk" style="color:' + p.color + '">' + dot + 'Project world</p>';
       h += '<p class="wscript">' + esc(p.label) + '</p><h2 class="wtitle">' + esc(moc.title || moc.name) + '</h2>';
+      h += metaLine([fmtPeriod(moc.period), moc.status, moc.role]);
       if (summary) h += '<p class="wsum">' + esc(summary) + '</p>';
-      h += metaHtml([{ k: 'Period', v: moc.period || '—' }, { k: 'Status', v: moc.status || '—' }, { k: 'Role', v: moc.role || '—' }]);
-      h += readLink(own ? own.i : p.moc, own ? '노트 읽기' : '개요 읽기');
+      h += wlink(own ? own.i : p.moc, own ? '노트 읽기' : '개요 읽기');
       const multi = p.sections.length > 1;
-      h += '<p class="sub">' + (multi ? 'Inside this world' : 'Notes in this world') + '</p>';
-      h += multi ? '<div class="secs">' + p.sections.map((s) => '<button type="button" class="sechead secrow" data-sec="' + esc(s.key) + '"><span class="no" style="color:' + p.color + '">' + s.no + '</span><span class="nm">' + esc(s.name) + '</span><span class="ct">노트 ' + s.ids.length + '</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8D97AE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></button>').join('') + '</div>'
-        : noteCards(p.sections[0].ids.filter((j) => j !== p.moc), p.color);
-      if (concepts.length) h += '<p class="sub">Concepts it runs on</p><div class="chips">' + concepts.map(chip).join('') + '</div>';
-      if (tools.length) h += '<p class="sub">Tools in hand</p><div class="chips">' + tools.map((m) => '<button type="button" class="chip" data-go="' + m.i + '">' + esc(m.name) + '</button>').join('') + '</div>';
+      h += multi ? idx(p.sections.map((s) => ({ attr: 'data-sec="' + esc(s.key) + '"', no: s.no, nm: s.name, ct: s.ids.length })), p.color)
+        : noteIdx(p.sections[0].ids.filter((j) => j !== p.moc), p.color);
+      h += '<div class="wfoot">' + tagLine('Concepts', concepts.slice(0, 6)) + tagLine('Tools', tools.slice(0, 6)) + '</div>';
       return { html: h, hint: multi ? 'Click a planet to zoom in' : 'Click a planet to read its note', label: p.label };
     }
     const kindEn = n.kind === 'concept' ? 'Concept world' : n.kind === 'tool' ? 'Tool world' : n.kind === 'course' ? 'Course world' : 'The whole brain';
@@ -116,7 +116,7 @@
       panel.innerHTML = r.html; panel.setAttribute('aria-label', r.label || ''); panel.setAttribute('data-w', key);
       if (same) panel.scrollTop = keep; else { panel.scrollTop = 0; panel.classList.remove('pin'); void panel.offsetWidth; panel.classList.add('pin'); }   // 섹션 안팎을 오갈 때 패널이 부드럽게 바뀐다
       panel.classList.remove('pout');
-      const on = panel.querySelector('.ncard.on'); if (on) on.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+      const on = panel.querySelector('.wrow.on'); if (on) on.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
       $('whint').textContent = r.hint;
       $('btn-back').querySelector('.back-t').textContent = r.back ? 'Back to ' + r.back : 'Back to the brain';
       if (wEl.hidden) wEl.hidden = false;
@@ -145,6 +145,14 @@
     const note = e.target.closest('[data-note]');
     if (note) { const j = Number(note.getAttribute('data-note')); if (eng && eng.drop(j)) return; if (eng && state.note !== j) eng.pick(j); openNote(j); }   // 패널의 노트 행도 행성 낙하 → 리더 (행성이 없으면 바로 리더)
   });
+  // 패널 목록 ↔ 행성 하이라이트 (양방향)
+  const rowKey = (el) => el.hasAttribute('data-sec') ? el.getAttribute('data-sec') : Number(el.getAttribute('data-note'));
+  $('wpanel').addEventListener('mouseover', (e) => { const r = e.target.closest('.wrow'); if (eng) eng.hl(r ? rowKey(r) : null); });
+  $('wpanel').addEventListener('mouseleave', () => { if (eng) eng.hl(null); });
+  function onWHover(act) {
+    const v = act ? (act.sec !== undefined ? act.sec : act.note) : null;
+    $('wpanel').querySelectorAll('.wrow').forEach((r) => r.classList.toggle('hl', v !== null && rowKey(r) === v));
+  }
   $('btn-back').addEventListener('click', () => { if (eng) eng.back(); });
   $('btn-skip').addEventListener('click', () => { if (eng) eng.skip(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.phase === 'world' && eng) eng.back(); });
@@ -165,6 +173,7 @@
       onBurst: () => { lightUp(); if (window.BG) window.BG.setMode('main'); },   // 파티클이 흩어지는 순간부터 배경 유체도 그래프 쪽으로 흐르기 시작
       onMain: () => set({ phase: 'main' }),
       onHover: () => {},
+      onWHover: onWHover,
       onDive: () => set({ phase: 'dive' }),
       onWorld: (i) => set({ phase: 'world', world: i, section: null, note: null }),
       onZoom: () => $('wpanel').classList.add('pout'),                 // 행성으로 줌인하는 동안 패널을 먼저 흐리게

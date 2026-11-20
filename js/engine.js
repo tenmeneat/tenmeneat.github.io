@@ -144,7 +144,7 @@ function createEngine(cv, opt, cb) {
   let mode = opt.intro ? 'intro' : 'main';
   let t0 = performance.now(), mainT0 = t0, dustT0 = t0, parts = null, pulses = [], pulseAcc = 0, visible = true, raf = 0, last = t0;
   let rnd = mkRng(Date.now() & 0xffff);
-  let orbitT = 0, dv = null, world = null, wT0 = 0, warp = null, wHover = -1, flash = null;
+  let orbitT = 0, dv = null, world = null, wT0 = 0, warp = null, wHover = -1, wExt = null, flash = null;   // wExt: 패널 목록에서 가리킨 섹션 키/노트 번호
   const cam = { z: 0, fx: 0, fy: 0 };
   const spr = {};
   function sprite(hex) {
@@ -798,7 +798,7 @@ function createEngine(cv, opt, cb) {
         return { u: u, v: cross3(nm, u), r: nr > 1 ? 1.35 + 0.55 * q / (nr - 1) : 1.6, ph: r0() * 6.28, sp: (0.0004 + r0() * 0.0005) * (r0() < 0.5 ? -1 : 1) };
       });
     });
-    st.wyaw = 0; st.wpitch = 0; wHover = -1; dp = null; GP = null;
+    st.wyaw = 0; st.wpitch = 0; wHover = -1; wExt = null; dp = null; GP = null;
     return w;
   }
   function wCenter() { const mob = W < 760; return mob ? [W / 2, H * 0.27, Math.min(W * 0.16, H * 0.11)] : [W * 0.65, H * 0.5, Math.min(W * 0.13, H * 0.2)]; }
@@ -1119,7 +1119,7 @@ function createEngine(cv, opt, cb) {
         if (pz) a *= k === pz.k ? 1 - 0.9 * clamp((pz.u - 550) / 500, 0, 1) : 1 - eIO(clamp((pz.u - 150) / 750, 0, 1));   // 포털: 누른 행성만 남고 나머지는 물러난다
         if (dT >= 0) a *= k === dp.k ? p.dropA : 1 - 0.55 * eIO(clamp(dT / 900, 0, 1));   // 낙하: 떨어진 행성은 가라앉고 나머지는 한발 물러난다
         if (a <= 0.01) return;
-        const focus = (world.focus && p.act.sec === world.focus) || (p.act.note !== undefined && world.pick === p.act.note), hv = k === wHover;
+        const focus = (world.focus && p.act.sec === world.focus) || (p.act.note !== undefined && world.pick === p.act.note), hv = k === wHover || (wExt !== null && (p.act.sec === wExt || p.act.note === wExt));
         // 오러리 암: 코어 가장자리에서 행성까지 곧은 금선
         const dx = p.sx - C[0], dy = p.sy - C[1], dd = Math.hypot(dx, dy), r0 = C[2] * 1.12;
         if (dd > r0 + p.sr) { ctx.strokeStyle = GOLD_D; ctx.lineWidth = 0.8; ctx.globalAlpha = (focus || hv ? 0.9 : 0.5) * a; ctx.beginPath(); ctx.moveTo(C[0] + dx / dd * r0, C[1] + dy / dd * r0); ctx.lineTo(p.sx - dx / dd * p.sr, p.sy - dy / dd * p.sr); ctx.stroke(); }
@@ -1282,7 +1282,7 @@ function createEngine(cv, opt, cb) {
         else if (st.hover !== -1) { st.hover = -1; cb.onHover(-1); }
       } else if (mode === 'world') {
         const h = st.mx > -999 && !st.drag && !warp && !dp ? planetHit(st.mx, st.my) : -1;
-        if (h !== wHover) { wHover = h; cv.style.cursor = h >= 0 ? 'pointer' : 'grab'; }
+        if (h !== wHover) { wHover = h; cv.style.cursor = h >= 0 ? 'pointer' : 'grab'; if (cb.onWHover) cb.onWHover(h >= 0 ? world.planets[h].act : null); }
       }
       if (fB > 0.002) drawBrain(now, dt, fB);
       dropStep(now);
@@ -1297,6 +1297,7 @@ function createEngine(cv, opt, cb) {
     dive: dive, travel: travel, back: back,
     mode: function () { return mode; },
     enterSection: enterSection, pick: pick, drop: drop, undrop: undrop, overload: overload,
+    hl: function (v) { wExt = v; },   // 패널 목록 hover → 행성 하이라이트
     skip: function () { if (mode === 'intro') { const n = performance.now(); mode = 'main'; mainT0 = n; dustT0 = n; cb.onMain(); } },
     setOpts: function (o) { Object.assign(opt, o); inkBuild(); },
     destroy: function () { cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); cv.removeEventListener('pointerdown', onDown); cv.removeEventListener('pointermove', onMove); cv.removeEventListener('pointerup', onUp); cv.removeEventListener('pointercancel', onUp); cv.removeEventListener('pointerleave', onLeave); }
