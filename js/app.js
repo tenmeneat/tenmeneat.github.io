@@ -143,18 +143,22 @@
     const sec = e.target.closest('[data-sec]');
     if (sec) { if (eng) eng.enterSection(sec.getAttribute('data-sec')); return; }   // 패널의 섹션 행도 행성을 누른 것과 같다: 줌인
     const note = e.target.closest('[data-note]');
-    if (note) { const j = Number(note.getAttribute('data-note')); if (eng && state.note !== j) eng.pick(j); openNote(j); }   // 행성을 짚고 리더로 본문을 연다
+    if (note) { const j = Number(note.getAttribute('data-note')); if (eng && eng.drop(j)) return; if (eng && state.note !== j) eng.pick(j); openNote(j); }   // 패널의 노트 행도 행성 낙하 → 리더 (행성이 없으면 바로 리더)
   });
   $('btn-back').addEventListener('click', () => { if (eng) eng.back(); });
   $('btn-skip').addEventListener('click', () => { if (eng) eng.skip(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.phase === 'world' && eng) eng.back(); });
+  // 리더가 닫히는 순간(rd-on 해제) 낙하 연출을 역재생 — 닫기 버튼은 pushState라 hashchange가 안 와서 클래스 변화를 본다
+  let rdOn = false;
+  new MutationObserver(() => { const on = document.documentElement.classList.contains('rd-on'); if (rdOn && !on && eng) eng.undrop(); rdOn = on; })
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
   // ---------- boot ----------
   const intro = CONFIG.showIntro && !reduce;
   const start = () => {
     window.BG = createBackdrop($('bg-canvas'));
     eng = createEngine($('brain-canvas'), {
-      intro: intro, autoRotate: CONFIG.autoRotate && !reduce, orbit: CONFIG.orbitMotion && !reduce,
+      intro: intro, autoRotate: CONFIG.autoRotate && !reduce, orbit: CONFIG.orbitMotion && !reduce, reduce: reduce,
       fonts: { script: S.css, k: S.k, it: S.it, body: "'Noto Sans KR', sans-serif", mono: "'Noto Sans KR', sans-serif" },
       introFont: CONFIG.introFont, ink: CONFIG.introInk, inkScale: CONFIG.introThickness
     }, {

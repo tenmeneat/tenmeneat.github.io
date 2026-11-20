@@ -232,7 +232,7 @@ function createEngine(cv, opt, cb) {
     if (st.moved >= 6) return;
     const p = pos(e);
     if (mode === 'main') { const h = hitTest(p[0], p[1]); if (h >= 0) dive(h); }
-    else if (mode === 'world' && !warp) { const h = planetHit(p[0], p[1]); if (h >= 0) planetAct(h); }
+    else if (mode === 'world' && !warp && !dp) { const h = planetHit(p[0], p[1]); if (h >= 0) planetAct(h); }
   }
   function onLeave() { st.mx = -9999; st.my = -9999; }
   cv.addEventListener('pointerdown', onDown); cv.addEventListener('pointermove', onMove);
@@ -674,7 +674,7 @@ function createEngine(cv, opt, cb) {
         return { u: u, v: cross3(nm, u), r: nr > 1 ? 1.35 + 0.55 * q / (nr - 1) : 1.6, ph: r0() * 6.28, sp: (0.0004 + r0() * 0.0005) * (r0() < 0.5 ? -1 : 1) };
       });
     });
-    st.wyaw = 0; st.wpitch = 0; wHover = -1;
+    st.wyaw = 0; st.wpitch = 0; wHover = -1; dp = null;
     return w;
   }
   function wCenter() { const mob = W < 760; return mob ? [W / 2, H * 0.27, Math.min(W * 0.16, H * 0.11)] : [W * 0.65, H * 0.5, Math.min(W * 0.13, H * 0.2)]; }
@@ -682,8 +682,27 @@ function createEngine(cv, opt, cb) {
   function planetAct(h) {
     const p = world.planets[h];
     if (p.act.sec) enterSection(p.act.sec);
-    else if (p.act.note !== undefined) { if (world.pick !== p.act.note) pick(p.act.note); if (cb.onOpen) cb.onOpen(p.act.note); }   // 노트 행성: 짚고 본문 리더를 연다
+    else if (p.act.note !== undefined) { if (!drop(p.act.note)) { if (world.pick !== p.act.note) pick(p.act.note); if (cb.onOpen) cb.onOpen(p.act.note); } }   // 노트 행성: 수면으로 떨어진 뒤 리더가 열린다
     else travel(p.act.go);
+  }
+  // ---------- 노트 낙하: 행성이 궤도면(=수면)으로 떨어져 파문 → 위에서 내려다보는 시점 → 그 위로 리더 ----------
+  const DROP_OPEN = 850, DROP_IN = 1300, DROP_OUT = 600, DROP_HIT = 220;   // 묵직하게: 제자리에서 천천히 잠기고, 리더는 0.85초에
+  let dp = null, dT = -1, dE = 0;   // dp = 낙하 상태, dT = 연출 시간축(ms, -1 = 없음), dE = 위에서 보는 시점으로 기운 정도
+  function drop(j) {
+    if (opt.reduce || mode !== 'world' || warp || !world) return false;
+    const k = world.planets.findIndex((p) => p.act.note === j); if (k < 0) return false;
+    if (world.pick !== j) pick(j);
+    const n = performance.now(); dp = { k: k, j: j, t0: n, tIn: n, dir: 'in', opened: false }; wHover = -1; cv.style.cursor = 'default';
+    return true;
+  }
+  // 리더가 닫히면 역재생(2배속): 시점이 돌아오고 행성이 수면에서 떠오른다
+  function undrop() { if (!dp || !dp.opened || dp.dir === 'out') return; const n = performance.now(); dp.from = Math.min(n - dp.t0, DROP_IN); dp.t0 = n; dp.dir = 'out'; }
+  function dropStep(now) {
+    dT = -1; dE = 0; if (!dp || !world) return;
+    const t = now - dp.t0;
+    if (dp.dir === 'in') { dT = Math.min(t, DROP_IN); if (!dp.opened && t >= DROP_OPEN) { dp.opened = true; if (cb.onOpen) cb.onOpen(dp.j); } }
+    else { dT = dp.from - t * DROP_IN / DROP_OUT; if (dT <= 0) { dp = null; dT = -1; return; } }
+    dE = eIO(clamp((dT - 350) / 900, 0, 1));
   }
   // 노트 행성 선택(강조 링 + 패널 카드 강조)
   function pick(j) { if (mode !== 'world' || !world) return; world.pick = world.pick === j ? null : j; cb.onNote(world.pick); }
@@ -891,26 +910,57 @@ function createEngine(cv, opt, cb) {
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = p.ringC; ctx.lineWidth = hl ? 1 : 0.8; ctx.globalAlpha = (hl ? 1 : 0.8) * a; ctx.stroke(FR); bead(true);
   }
+  // 파문: 수면(궤도면) 위 동심 타원 — 위에서 보는 시점으로 기울수록 정원이 된다. 가닥 3겹(적도 금빛 띠와 같은 질감)
+  function drawRipples(now, C, tS, tC) {
+    if (dp.x === undefined) return;
+    const age = now - dp.tIn - DROP_HIT, fade = dp.dir === 'out' ? dT / DROP_IN : 1; if (age < -60) return;
+    const P = (X, Z, o) => { const s = 6 / (6 - Z * tC); o[0] = C[0] + X * s * C[2]; o[1] = C[1] + Z * tS * s * C[2] * 0.95; return o; };
+    const ring = (R, al) => {
+      if (al <= 0.01 || R <= 0) return;
+      [1, 0.965, 0.93].forEach((f, q) => {
+        ctx.globalAlpha = al * [1, 0.5, 0.28][q]; ctx.beginPath();
+        for (let i = 0; i <= 72; i++) { const t = i / 72 * TAU; P(dp.x + Math.cos(t) * R * f, dp.z + Math.sin(t) * R * f, ep); if (i) ctx.lineTo(ep[0], ep[1]); else ctx.moveTo(ep[0], ep[1]); }
+        ctx.stroke();
+      });
+    };
+    ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = GOLD_L; ctx.lineWidth = 0.9;
+    for (let i = 0; i < 3; i++) { const u = age - i * 260; if (u >= 0) ring(0.1 + u * 0.0011, 0.8 * Math.pow(1 - clamp(u / 2400, 0, 1), 1.4) * fade); }   // 첫 파문 3겹: 느리고 넓게
+    if (age > 1400) { const k0 = clamp((age - 1400) / 800, 0, 1); for (let q = 0; q < 3; q++) { const u = ((age - 1400) / 3200 + q / 3) % 1; ring(0.15 + u * 2.2, 0.2 * Math.sin(Math.PI * u) * k0 * fade); } }   // 읽는 동안: 느리고 옅은 파문
+    if (age < 900) {   // 잠기는 자리의 빛: 튀지 않고 천천히 부풀었다 가라앉는다
+      P(dp.x, dp.z, ep); const f = Math.sin(Math.PI * clamp((age + 60) / 960, 0, 1)), z = C[2] * (0.4 + 0.7 * f);
+      ctx.globalAlpha = 0.55 * f * fade; ctx.drawImage(sprite(GOLD_L), ep[0] - z / 2, ep[1] - z / 2, z, z);
+      ctx.globalAlpha = 0.45 * f * fade; ctx.drawImage(sprite(world.color), ep[0] - z, ep[1] - z, z * 2, z * 2);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
   function drawWorld(now, dt, aW, gW) {
     if (!world || aW <= 0.002) return;
     const C = wCenter(), mob = W < 760, el = now - wT0;
-    wcy_ = Math.cos(now * 0.00008 + st.wyaw); wsy_ = Math.sin(now * 0.00008 + st.wyaw); wcp_ = Math.cos(0.3 + st.wpitch); wsp_ = Math.sin(0.3 + st.wpitch);
+    const pw = 0.3 + st.wpitch + dE * 1.2;   // 노트 낙하 중에는 위에서 내려다보는 시점(≈86°)으로 기운다
+    wcy_ = Math.cos(now * 0.00008 + st.wyaw); wsy_ = Math.sin(now * 0.00008 + st.wyaw); wcp_ = Math.cos(pw); wsp_ = Math.sin(pw);
     // planets on a tilted orbit
-    const Ro = mob ? 2.1 : 2.05, tilt = 0.42 + st.wpitch * 0.5, tS = Math.sin(tilt), tC = Math.cos(tilt);
+    const Ro = mob ? 2.1 : 2.05, tilt = 0.42 + st.wpitch * 0.5 + dE * 1.08, tS = Math.sin(tilt), tC = Math.cos(tilt);
     world.planets.forEach((p, k) => {
       const th = p.a0 + el * 0.00005 + st.wyaw * 0.35, X = Math.cos(th) * Ro, Z = Math.sin(th) * Ro, z = Z * tC, s = 6 / (6 - z);
-      p.sx = C[0] + X * s * C[2]; p.sy = C[1] + Z * tS * s * C[2] * 0.95; p.z = z; p.s = s;
+      p.sx = C[0] + X * s * C[2]; p.sy = C[1] + Z * tS * s * C[2] * 0.95; p.z = z; p.s = s; p.X = X; p.Z = Z;
       p.pa = eOut(clamp((el - 450 - k * 110) / 900, 0, 1)) * aW;
       p.sr = C[2] * (mob ? 0.26 : 0.22) * p.rad * s * (0.6 + 0.4 * p.pa);
+      p.dropA = 1;
+      if (dT >= 0 && k === dp.k) {   // 제자리에서 무게를 실어 천천히 잠긴다: 처음엔 느리게, 물에 들어간 뒤엔 저항으로 다시 느려진다
+        if (dp.x === undefined) { dp.x = X; dp.z = Z; }
+        const d = eIO(clamp(dT / 1000, 0, 1)), sink = eIn(clamp((dT - DROP_HIT) / 850, 0, 1));
+        p.sy += d * 0.2 * C[2]; p.sr *= 1 - 0.35 * sink; p.dropA = 1 - sink;
+      }
     });
     // 줌인/아웃: 선택한 행성이 화면 중심(세계 중심)으로 이동하며 확대된다. 라벨은 확대되는 동안 숨긴다
     if (pS !== 1) { ctx.save(); ctx.translate(C[0], C[1]); ctx.scale(pS, pS); ctx.translate(-C[0], -C[1]); }   // 포털 통과
-    const lbl = pz ? clamp(1 - pz.u / 250, 0, 1) : 1 - pE;
+    const lbl = (pz ? clamp(1 - pz.u / 250, 0, 1) : 1 - pE) * (dT >= 0 ? clamp(1 - dT / 450, 0, 1) : 1);
     const drawP = (front) => {
       world.planets.forEach((p, k) => {
         if ((p.z >= 0) !== front || p.pa <= 0.01) return;
         let a = p.pa * (0.55 + 0.45 * clamp((p.z + Ro) / (2 * Ro), 0, 1));
         if (pz) a *= k === pz.k ? 1 - 0.9 * clamp((pz.u - 550) / 500, 0, 1) : 1 - eIO(clamp((pz.u - 150) / 750, 0, 1));   // 포털: 누른 행성만 남고 나머지는 물러난다
+        if (dT >= 0) a *= k === dp.k ? p.dropA : 1 - 0.55 * eIO(clamp(dT / 900, 0, 1));   // 낙하: 떨어진 행성은 가라앉고 나머지는 한발 물러난다
         if (a <= 0.01) return;
         const focus = (world.focus && p.act.sec === world.focus) || (p.act.note !== undefined && world.pick === p.act.note), hv = k === wHover;
         // 오러리 암: 코어 가장자리에서 행성까지 곧은 금선
@@ -941,12 +991,13 @@ function createEngine(cv, opt, cb) {
       orb(ta, ep); OD[f].moveTo(ep[0], ep[1]); orb(tb, ep); OD[f].lineTo(ep[0], ep[1]);
       if (ord) { const ua = (((ta - th0) % TAU) + TAU) % TAU; if (ua + TAU / 140 <= arcEnd + 1e-6) { orb(ta, ep); OA[f].moveTo(ep[0], ep[1]); orb(tb, ep); OA[f].lineTo(ep[0], ep[1]); } }
     }
-    const oA = aW * clamp((el - 300) / 800, 0, 1) * (1 - pE), aA = aW * clamp((el - 900) / 900, 0, 1) * (1 - pE);
+    const oA = aW * clamp((el - 300) / 800, 0, 1) * (1 - pE) * (1 - 0.5 * dE), aA = aW * clamp((el - 900) / 900, 0, 1) * (1 - pE) * (1 - 0.6 * dE);
     const drawOrbit = (f) => {
       ctx.setLineDash([1.2, 7]); ctx.strokeStyle = world.light; ctx.lineWidth = 1; ctx.globalAlpha = 0.22 * oA; ctx.stroke(OD[f]); ctx.setLineDash([]);
       if (ord) { ctx.strokeStyle = GOLD_L; ctx.lineWidth = 1; ctx.globalAlpha = (f ? 0.45 : 0.25) * aA; ctx.stroke(OA[f]); }
     };
     drawOrbit(0);
+    if (dT >= 0) drawRipples(now, C, tS, tC);
     drawP(false);
     // 혼천의 코어: 뒤쪽 링 → 코어 구 → 앞쪽 링
     drawArmillary(now, el, aW * gW, C, false);
@@ -1069,10 +1120,11 @@ function createEngine(cv, opt, cb) {
         else if (st.drag) cv.style.cursor = 'grabbing';
         else if (st.hover !== -1) { st.hover = -1; cb.onHover(-1); }
       } else if (mode === 'world') {
-        const h = st.mx > -999 && !st.drag && !warp ? planetHit(st.mx, st.my) : -1;
+        const h = st.mx > -999 && !st.drag && !warp && !dp ? planetHit(st.mx, st.my) : -1;
         if (h !== wHover) { wHover = h; cv.style.cursor = h >= 0 ? 'pointer' : 'grab'; }
       }
       if (fB > 0.002) drawBrain(now, dt, fB);
+      dropStep(now);
       drawWorld(now, dt, aW, gW);
       drawFlash(now);
     }
@@ -1082,7 +1134,7 @@ function createEngine(cv, opt, cb) {
   return {
     dive: dive, travel: travel, back: back,
     mode: function () { return mode; },
-    enterSection: enterSection, pick: pick,
+    enterSection: enterSection, pick: pick, drop: drop, undrop: undrop,
     skip: function () { if (mode === 'intro') { const n = performance.now(); mode = 'main'; mainT0 = n; dustT0 = n; cb.onMain(); } },
     setOpts: function (o) { Object.assign(opt, o); inkBuild(); },
     destroy: function () { cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); cv.removeEventListener('pointerdown', onDown); cv.removeEventListener('pointermove', onMove); cv.removeEventListener('pointerup', onUp); cv.removeEventListener('pointercancel', onUp); cv.removeEventListener('pointerleave', onLeave); }
