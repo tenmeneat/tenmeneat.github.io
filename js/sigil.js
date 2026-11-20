@@ -19,7 +19,7 @@ function createSigil() {
   function stroke(segs, a, opt) {   // segs: [[x0,y0,x1,y1,...], ...] — 순서대로 이어 그린다
     opt = opt || {};
     const cl = segs.map((P) => { const c = new Float32Array(P.length / 2); for (let j = 1; j < c.length; j++) c[j] = c[j - 1] + Math.hypot(P[2 * j] - P[2 * j - 2], P[2 * j + 1] - P[2 * j - 1]); return c; });
-    const s = { segs: segs, cl: cl, len: cl.reduce((t, c) => t + c[c.length - 1], 0), a: a, gear: opt.gear ?? -1, dur: opt.dur, tie: opt.tie, w: opt.w || 1, baked: false };
+    const s = { segs: segs, cl: cl, len: cl.reduce((t, c) => t + c[c.length - 1], 0), a: a, gear: opt.gear ?? -1, dur: opt.dur, tie: opt.tie, w: opt.w || 1, anc: opt.anc, baked: false };   // anc: 화면 비율 좌표에 붙는 획(칠판)
     ST.push(s); return s;
   }
   function circlePts(x, y, r, a0, dir) {
@@ -73,6 +73,57 @@ function createSigil() {
   [[-1.2, -0.5], [1.2, -0.5], [-1.2, 0.5], [1.2, 0.5]].forEach((q) => circle(q[0], q[1], 0.018, 0.35));
   // 7) 궤도 위 작은 인장 3개
   [-2.1, 0.35, 2.75].forEach((an) => { const x = Math.cos(an) * 1.2, y = Math.sin(an) * 1.2; circle(x, y, 0.06, 0.4); circle(x, y, 0.036, 0.35); poly(vtx(3, 0.05, an).map((q) => [q[0] + x, q[1] + y]), 0.3); ND.push({ x: x, y: y, r: 0.7 }); });
+  // 8) 밀도 (ref: 빼곡한 비전 도해) — 바깥 수식 링 2겹 + 크기가 제각각인 작은 인장들 + 빈 곳의 수식 블록
+  const FORM = ['∇·E = ρ/ε₀', '∇×B = μ₀J + μ₀ε₀∂E/∂t', 'ρ(∂u/∂t + u·∇u) = −∇p + μ∇²u', 'F(ω) = ∫f(t)e^(−iωt)dt', 'e^(iπ) + 1 = 0', 'σ = Eε', 'Re = ρuL/μ',
+    'H(s) = ωₙ²/(s² + 2ζωₙs + ωₙ²)', 'ẋ = Ax + Bu', 'Mẍ + Cẋ + Kx = F(t)', '∂²u/∂t² = c²∇²u', 'det(A − λI) = 0', '∮B·dl = μ₀I', 'ΣF = ma', 'Q = ṁcₚΔT', 'τ = Iα',
+    'L = T − V', 'δ∫L dt = 0', 'K = PS⁻¹ (Riccati)', 'J = ∫(xᵀQx + uᵀRu)dt', 'D = Σ nᵢ/Nᵢ', 'σₐ/σf + σₘ/σu = 1', 'Nu = hL/k', 'ε = ΔL/L₀', 'P = ½ρAv³Cp',
+    'ζ = c/2√(km)', 'ωₙ = √(k/m)', 'G(jω) = |G|∠φ', 'ΔS ≥ ∫δQ/T', 'pV = nRT', 'ẏ = f(y,t)', 'x(k+1) = Φx(k) + Γu(k)', 'Ma = v/a', 'Cd = 2F/(ρv²A)', '∂ρ/∂t + ∇·(ρu) = 0'];
+  const TR = [], TB = [];
+  const fill = (n) => { let s = ''; for (let k = Math.floor(rnd() * FORM.length); s.length < n; k++) s += FORM[k % FORM.length] + '  ·  '; return Array.from(s).slice(0, n); };
+  function textRing(ox, oy, r, size, a) { TR.push({ ox: ox, oy: oy, r: r, size: size, a: a, a0: rnd() * TAU, ch: fill(Math.max(8, Math.floor(TAU * r / (size * 0.62)))) }); }
+  circle(0, 0, 0.745, 0.22); textRing(0, 0, 0.765, 0.022, 0.3);   // 안쪽 수식 띠 (0.72 ~ 0.8 사이)
+  circle(0, 0, 1.32, 0.3); circle(0, 0, 1.45, 0.3); textRing(0, 0, 1.385, 0.034, 0.32);   // 가장 바깥 수식 링
+  sweep(240, (i) => rad(1.32, 1.32 - (i % 10 ? 0.01 : 0.025), TAU * i / 240), 0.28, 0.24);
+  const keep = (x, y, r) => Math.hypot(x / 1.15, y / 0.42) > 1 + r * 2;   // 가운데 이니셜 자리는 비운다
+  for (let n = 0, tries = 0; n < 16 && tries < 600; tries++) {   // 작은 인장: 테두리 + 수식 띠 + (별·눈금·동심원 중 하나). 화면이 가로로 넓어 좌우로 더 멀리 퍼뜨린다
+    const an = rnd() * TAU, d = 0.5 + rnd() * 1.5, x = Math.cos(an) * d * 1.25, y = Math.sin(an) * d * 0.72, r = 0.07 + Math.pow(rnd(), 1.6) * 0.26;
+    if (!keep(x, y, r)) continue; n++;
+    const a = 0.22 + rnd() * 0.14;
+    circle(x, y, r, a + 0.08); circle(x, y, r * 0.8, a); textRing(x, y, r * 0.9, Math.max(0.014, r * 0.085), a + 0.06);
+    const kind = Math.floor(rnd() * 3);
+    if (kind === 0) { const m = [5, 6, 7, 8, 9][Math.floor(rnd() * 5)], kk = m === 6 ? 2 : Math.floor(m / 2) - (m % 2 ? 0 : 1); poly(vtx(m, r * 0.7, rnd() * TAU).map((q, i, arr) => arr[(i * kk) % m]).map((q) => [q[0] + x, q[1] + y]), a); }
+    else if (kind === 1) { const m = 24 + Math.floor(r * 120); sweep(m, (i) => { const t = TAU * i / m; return [x + Math.cos(t) * r * 0.78, y + Math.sin(t) * r * 0.78, x + Math.cos(t) * r * (i % 4 ? 0.72 : 0.66), y + Math.sin(t) * r * (i % 4 ? 0.72 : 0.66)]; }, a, 0.14); circle(x, y, r * 0.35, a); }
+    else { circle(x, y, r * 0.6, a); circle(x, y, r * 0.42, a); circle(x, y, r * 0.24, a); TX.push({ x: x, y: y, rot: 0, s: MSYM[Math.floor(rnd() * MSYM.length)], size: r * 0.3, a: a + 0.1 }); }
+    if (r > 0.16 && rnd() < 0.6) textRing(x, y, r * 0.5, Math.max(0.012, r * 0.06), a);
+  }
+  // 9) 수식 칠판 (ref: 화면 끝까지 빼곡한 수식·그래프·도해 — 마법진은 그 칠판 위의 한 요소)
+  // 화면 비율 좌표(u,v)에 붙어 화면 전체를 덮는다. 로딩이 진행될수록 칠판이 채워진다. 이니셜 자리는 옅게.
+  const blockAt = (u, v, x, y, lines, size, a, rot) => TB.push({ anc: [u, v], x: x, y: y, rot: rot, lines: lines, size: size, a: a * (Math.hypot((u - 0.5) / 0.36, (v - 0.46) / 0.2) < 1 ? 0.35 : 1), n: lines.join('').length });
+  const ell = (x, y, rx, ry, a0) => { const P = []; for (let i = 0; i <= 64; i++) { const t = a0 + TAU * i / 64; P.push(x + Math.cos(t) * rx, y + Math.sin(t) * ry); } return P; };
+  const DIAG = [
+    (s) => { const P = []; for (let i = 0; i <= 70; i++) { const x = i / 70; P.push(-s + x * 2 * s, -Math.exp(-2.4 * x) * Math.sin(x * 15) * s * 0.65); } return { g: [[-s, s * 0.75, -s, -s * 0.8], [-s, 0, s * 1.1, 0], P], l: [['x(t)', -s * 0.75, -s * 0.85], ['t', s * 1.15, s * 0.12]] }; },   // 감쇠 진동 응답
+    (s) => ({ g: [ell(0, 0, s, s, 0), ell(0, 0, s, s * 0.3, 0), ell(0, 0, s * 0.36, s, 0), ell(0, -s * 0.55, s * 0.83, s * 0.22, 0)], l: [['r = R', s * 1.1, -s * 0.9]] }),   // 와이어 구
+    (s) => ({ g: [ell(0, s * 0.75, s * 0.8, s * 0.22, 0), [-s * 0.8, s * 0.75, 0, -s * 0.95, s * 0.8, s * 0.75], [0, -s * 0.95, 0, s * 0.75], [0, s * 0.75, s * 0.8, s * 0.75]], l: [['h', s * 0.12, 0], ['r', s * 0.4, s * 0.95]] }),   // 원뿔
+    (s) => ({ g: [[-s, s * 0.6, s, s * 0.6, s, -s * 0.7, -s, s * 0.6], ell(-s, s * 0.6, s * 0.3, s * 0.3, -0.6).slice(0, 14), [s * 0.82, s * 0.6, s * 0.82, s * 0.42, s, s * 0.42]], l: [['θ', -s * 0.55, s * 0.4], ['a', 0, s * 0.85], ['b', s * 1.18, 0], ['c', -s * 0.1, -s * 0.2]] }),   // 직각삼각형
+    (s) => { const Z = [-s, 0]; for (let i = 1; i <= 9; i++) Z.push(-s + i * s * 0.11, i % 2 ? -s * 0.18 : s * 0.18); Z.push(0, 0); return { g: [[-s, -s * 0.5, -s, s * 0.5], Z, [0, -s * 0.35, s * 0.7, -s * 0.35, s * 0.7, s * 0.35, 0, s * 0.35, 0, -s * 0.35], [s * 0.7, 0, s * 1.15, 0, s * 1.05, -s * 0.07, s * 1.15, 0, s * 1.05, s * 0.07]], l: [['k', -s * 0.55, -s * 0.38], ['m', s * 0.35, 0], ['F', s * 1.2, -s * 0.15]] }; },   // 스프링–질량
+    (s) => ({ g: [ell(0, 0, s, s * 0.62, 0), ell(0, 0, s * 0.5, s * 0.31, 0), [0, 0, s, 0], [0, 0, -s * 0.3, -s * 0.52]], l: [['O', -s * 0.08, s * 0.1], ['R', s * 0.5, -s * 0.1], ['2R', s * 0.75, s * 0.4]] }),   // 동심 타원
+    (s) => { const P = []; for (let i = 0; i <= 140; i++) { const t = i / 140 * 5 * TAU; P.push(-s + (t / (5 * TAU)) * 2 * s - Math.sin(t) * s * 0.1, -Math.cos(t) * s * 0.18 + s * 0.05); } return { g: [P], l: [['y′ = −a³/x', -s * 0.2, -s * 0.45]] }; },   // 코일(트로코이드)
+    (s) => { const P = []; for (let i = 0; i <= 50; i++) { const x = i / 50; P.push(-s + x * 2 * s, s * 0.45 - Math.min(1, x * 3) * s * 0.9 + Math.max(0, x - 0.33) * s * 0.55); } return { g: [[-s, -s * 0.7, -s, s * 0.7, s * 1.1, s * 0.7], P, [-s, -s * 0.45, s, -s * 0.45]], l: [['|G(jω)|', -s * 0.7, -s * 0.85], ['ω', s * 1.15, s * 0.6]] }; }   // 보드 선도
+  ];
+  const COLS = 10, ROWS = 7;
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    const u = (c + 0.5 + (rnd() - 0.5) * 0.6) / COLS, v = (r + 0.5 + (rnd() - 0.5) * 0.6) / ROWS, a = 0.32 + rnd() * 0.16;
+    if (rnd() < 0.36) {   // 도해 + 라벨
+      const s = 0.1 + rnd() * 0.08, D = DIAG[Math.floor(rnd() * DIAG.length)](s), aa = a * (Math.hypot((u - 0.5) / 0.36, (v - 0.46) / 0.2) < 1 ? 0.35 : 1);
+      D.g.forEach((P) => stroke([P], aa, { anc: [u, v] }));
+      D.l.forEach((L) => blockAt(u, v, L[1], L[2], [L[0]], 0.026, a, 0));
+    } else {   // 수식 블록 2~4줄
+      const L = 2 + Math.floor(rnd() * 3), lines = [], k0 = Math.floor(rnd() * FORM.length);
+      for (let i = 0; i < L; i++) lines.push(FORM[(k0 + i * 5) % FORM.length]);
+      blockAt(u, v, 0, 0, lines, 0.026 + rnd() * 0.016, a, (rnd() - 0.5) * 0.12);
+    }
+  }
+  for (let i = 0; i < 60; i++) { const u = rnd(), v = rnd(); blockAt(u, v, 0, 0, [FORM[Math.floor(rnd() * FORM.length)]], 0.02 + rnd() * 0.012, 0.24 + rnd() * 0.14, (rnd() - 0.5) * 0.1); }   // 틈새를 메우는 한 줄 수식
   // 금빛 노드: 세로축 위 + 씨앗의 교점 + 육각성 꼭짓점
   for (let k = 1; k <= 6; k++) { ND.push({ x: 0, y: -k * 0.25, r: k === 2 || k === 4 ? 1.2 : 0.9 }, { x: 0, y: k * 0.25, r: k === 2 || k === 4 ? 1.2 : 0.9 }); }
   vtx(6, 0.433, -Math.PI / 3).forEach((q) => ND.push({ x: q[0], y: q[1], r: 0.7 }));
@@ -120,6 +171,7 @@ function createSigil() {
   });
   TX.forEach((x) => { x.d = 0.14; x.t0 = 0.05 + rnd() * 0.78; });
   ND.forEach((n) => { n.d = 0.16; n.t0 = 0.1 + rnd() * 0.72; });
+  TR.concat(TB).forEach((x) => { x.d = 0.12 + rnd() * 0.1; x.t0 = 0.04 + rnd() * (0.94 - x.d); });   // 글자 띠·블록은 한 글자씩 써 내려간다
 
   // 노드 글로우 스프라이트
   const glow = document.createElement('canvas'); glow.width = glow.height = 64;
@@ -150,6 +202,20 @@ function createSigil() {
     c.save(); c.translate(cx, cy); c.rotate(x.rot); c.fillStyle = rgba(LINE, a); c.font = Math.max(6, Math.round(x.size * R)) + 'px ' + MFONT;
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(x.s, x.x * R, x.y * R); c.restore();
   }
+  // 원을 따라 도는 수식 띠: 앞에서부터 frac만큼의 글자
+  function ring(c, T, cx, cy, R, frac) {
+    const n = T.ch.length, m = Math.floor(n * frac), ox = cx + T.ox * R, oy = cy + T.oy * R, r = T.r * R;
+    c.fillStyle = rgba(LINE, T.a); c.font = Math.max(5, Math.round(T.size * R)) + 'px ' + MFONT; c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (let i = 0; i < m; i++) { const an = T.a0 + TAU * i / n; c.save(); c.translate(ox + Math.cos(an) * r, oy + Math.sin(an) * r); c.rotate(an + Math.PI / 2); c.fillText(T.ch[i], 0, 0); c.restore(); }
+  }
+  // 수식 블록: 줄 단위로 써 내려간다
+  function block(c, B, cx, cy, R, frac, W, H) {   // anc가 있으면 화면 비율 좌표 기준(칠판 필기 — 이탤릭)
+    let left = Math.floor(B.n * frac); const px = Math.max(5, Math.round(B.size * R)), bx = B.anc ? B.anc[0] * W : cx, by = B.anc ? B.anc[1] * H : cy;
+    c.save(); c.translate(bx + B.x * R, by + B.y * R); c.rotate(B.rot); c.fillStyle = rgba(LINE, B.a); c.font = (B.anc ? 'italic ' : '') + px + 'px ' + MFONT; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const h = px * 1.45, y0 = -(B.lines.length - 1) * h / 2;
+    for (let i = 0; i < B.lines.length && left > 0; i++) { const s = B.lines[i]; c.fillText(left >= s.length ? s : s.slice(0, left), 0, y0 + i * h); left -= s.length; }
+    c.restore();
+  }
 
   return {
     draw: function (ctx, o) {
@@ -157,11 +223,14 @@ function createSigil() {
       const k2 = [Math.round(o.W * o.dpr), Math.round(o.H * o.dpr), cx, cy, R].join('|');
       if (k2 !== key) {   // 크기가 바뀌면 다시 굽는다
         key = k2; bake.width = Math.round(o.W * o.dpr); bake.height = Math.round(o.H * o.dpr);
-        ST.forEach((s) => { s.baked = false; }); TX.forEach((x) => { x.baked = false; });
+        ST.forEach((s) => { s.baked = false; }); TX.concat(TR, TB).forEach((x) => { x.baked = false; });
       }
       bg.setTransform(o.dpr, 0, 0, o.dpr, 0, 0); bg.lineCap = 'round'; bg.lineJoin = 'round';
-      ST.forEach((s) => { if (s.gear < 0 && !s.baked && p >= s.t0 + s.d) { bg.strokeStyle = rgba(LINE, s.a); bg.lineWidth = lw * s.w; path(bg, s, s.len, cx, cy, R, 1, 0); s.baked = true; } });
+      const ox = (s) => (s.anc ? s.anc[0] * o.W : cx), oy = (s) => (s.anc ? s.anc[1] * o.H : cy);
+      ST.forEach((s) => { if (s.gear < 0 && !s.baked && p >= s.t0 + s.d) { bg.strokeStyle = rgba(LINE, s.a); bg.lineWidth = lw * s.w; path(bg, s, s.len, ox(s), oy(s), R, 1, 0); s.baked = true; } });
       TX.forEach((x) => { if (!x.baked && p >= x.t0 + x.d) { text(bg, x, cx, cy, R, x.a); x.baked = true; } });
+      TR.forEach((x) => { if (!x.baked && p >= x.t0 + x.d) { ring(bg, x, cx, cy, R, 1); x.baked = true; } });
+      TB.forEach((x) => { if (!x.baked && p >= x.t0 + x.d) { block(bg, x, cx, cy, R, 1, o.W, o.H); x.baked = true; } });
 
       ctx.save();
       if (o.s !== 1) { ctx.translate(cx, cy); ctx.scale(o.s, o.s); ctx.translate(-cx, -cy); }
@@ -172,9 +241,11 @@ function createSigil() {
         const e = eIO(clamp((p - s.t0) / s.d, 0, 1));
         ctx.strokeStyle = rgba(LINE, s.a); ctx.lineWidth = lw * s.w;
         if (s.gear >= 0) { const G = GEARS[s.gear], an = G.phi + G.w * o.tau * 0.5; path(ctx, s, s.len * e, cx + G.x * R, cy + G.y * R, R, Math.cos(an), Math.sin(an)); }
-        else path(ctx, s, s.len * e, cx, cy, R, 1, 0);
+        else path(ctx, s, s.len * e, ox(s), oy(s), R, 1, 0);
       });
       TX.forEach((x) => { if (x.baked || p <= x.t0) return; text(ctx, x, cx, cy, R, x.a * clamp((p - x.t0) / x.d, 0, 1)); });
+      TR.forEach((x) => { if (!x.baked && p > x.t0) ring(ctx, x, cx, cy, R, clamp((p - x.t0) / x.d, 0, 1)); });
+      TB.forEach((x) => { if (!x.baked && p > x.t0) block(ctx, x, cx, cy, R, clamp((p - x.t0) / x.d, 0, 1), o.W, o.H); });
       // 금빛 노드: 천천히 스며들듯 켜진다 (깜빡임·펜 끝 불꽃 없음 — 시선은 이니셜에)
       ND.forEach((n) => {
         if (p <= n.t0) return;

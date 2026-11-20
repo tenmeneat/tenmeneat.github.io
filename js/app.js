@@ -6,7 +6,7 @@
   const CONFIG = {
     scriptFont: Q.get('font') || 'alegreya',           // 제목 글꼴: alegreya | allura | sacramento | parisienne | italianno
     accent: '#' + (Q.get('accent') || 'BFD3FF'),
-    introFont: Q.get('introFont') || 'mrs-saint-delafield', // mrs-saint-delafield | great-vibes | pinyon-script
+    introFont: Q.get('introFont') || 'great-vibes',          // great-vibes | mrs-saint-delafield | pinyon-script
     introInk: '#D4AF6A',
     introThickness: 0.6,
     showIntro: Q.get('intro') !== '0',
