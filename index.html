@@ -15,7 +15,9 @@
 (function () {
   var d = document.documentElement;
   if (new URLSearchParams(location.search).get('intro') === '0' || (matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
-  d.classList.add('boot'); setTimeout(function () { d.classList.remove('boot'); }, 6000);   // 스크립트가 실패해도 화면이 비지 않게 하는 안전장치
+  d.classList.add('boot', 'intro-dark', 'intro-lock');   // intro-lock: 인트로 동안 스크롤 잠금 (app.js가 메인으로 넘어갈 때 해제)
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';   // 새로고침 때 이전 스크롤 위치로 돌아가지 않고 맨 위에서 인트로 시작
+  setTimeout(function () { d.classList.remove('boot', 'intro-dark', 'intro-lock'); }, 15000);   // 스크립트가 실패해도 화면이 비거나 스크롤이 잠긴 채 남지 않게 하는 안전장치 (인트로 ~9초보다 길게)
 })();
 </script>
 </head>
@@ -208,6 +210,7 @@
 <div class="reader" id="reader" role="dialog" aria-modal="true" hidden></div>
 <script src="js/data.js"></script>
 <script src="js/glyphs.js"></script>
+<script src="js/sigil.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/backdrop.js"></script>
 <script src="js/app.js"></script>

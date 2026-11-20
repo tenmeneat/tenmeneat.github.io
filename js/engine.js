@@ -255,22 +255,46 @@ function createEngine(cv, opt, cb) {
   function inkBuild() {
     const q = rgbOf(opt.ink || '#D4AF6A'), mix = (a, b, f) => Math.round(a + (b - a) * f);
     const dark = q.map((v) => v * 0.55), light = q.map((v) => mix(v, 255, 0.55));
-    const shades = [];
-    for (let i = 0; i < 16; i++) { const f = i / 15; shades.push('rgb(' + [0, 1, 2].map((k) => Math.round(dark[k] + (light[k] - dark[k]) * f)).join(',') + ')'); }
-    INK = { key: (opt.ink || '') + '|', shades: shades, glow: 'rgb(' + q.join(',') + ')', light: 'rgb(' + light.join(',') + ')', hot: '#' + light.map((v) => mix(v, 255, 0.4).toString(16).padStart(2, '0')).join(''), base: opt.ink || '#D4AF6A', w: opt.inkScale ?? 0.6 };
+    const rgb = (c, f) => 'rgb(' + c.map((v) => Math.round(v * f)).join(',') + ')';
+    // 깊이(알파) 대신 검정 쪽으로 어둡게 한 불투명 색을 쓴다 → 겹쳐도 알파가 쌓여 밝아지지 않는다
+    // sd[lvl*16 + shade]: lvl 0~7 = 깊이 (lvl+0.5)/8, lvl 8 = 원색. gd/ld[lvl]: 글로우·점 색, lvl/8 배
+    const sd = [], gd = [], ld = [];
+    for (let l = 0; l <= 8; l++) {
+      const f = l < 8 ? (l + 0.5) / 8 : 1;
+      for (let i = 0; i < 16; i++) sd.push(rgb([0, 1, 2].map((k) => dark[k] + (light[k] - dark[k]) * i / 15), f));
+      gd.push(rgb(q, l / 8)); ld.push(rgb(light, l / 8));
+    }
+    INK = { key: (opt.ink || '') + '|', sd: sd, gd: gd, ld: ld, glow: 'rgb(' + q.join(',') + ')', light: 'rgb(' + light.join(',') + ')', hot: '#' + light.map((v) => mix(v, 255, 0.4).toString(16).padStart(2, '0')).join(''), base: opt.ink || '#D4AF6A', w: opt.inkScale ?? 0.6 };
   }
   inkBuild();
   // 띠(band) 렌더러: 점 열 → 좌우 법선 오프셋 다각형. 선분마다 stroke하던 것을 획당 수 회의 fill로 줄인다
   const MAXP = 8192, BX = new Float32Array(MAXP), BY = new Float32Array(MAXP), BR = new Float32Array(MAXP), BA = new Float32Array(MAXP), NX = new Float32Array(MAXP), NY = new Float32Array(MAXP), BK = new Int16Array(MAXP);
   function inkIdx(ax, ay, bx, by) { const a = Math.atan2(by - ay, bx - ax); const f = 0.5 + 0.5 * Math.cos(2 * (a - 0.75)); return Math.min(15, Math.floor(Math.pow(f, 0.8) * 16)); }
-  function fillBand(s0, e0, k) {
-    ctx.beginPath();
-    for (let i = s0; i <= e0; i++) { const r = BR[i] * k; if (i === s0) ctx.moveTo(BX[i] + NX[i] * r, BY[i] + NY[i] * r); else ctx.lineTo(BX[i] + NX[i] * r, BY[i] + NY[i] * r); }
-    for (let i = e0; i >= s0; i--) { const r = BR[i] * k; ctx.lineTo(BX[i] - NX[i] * r, BY[i] - NY[i] * r); }
-    ctx.closePath(); ctx.fill();
+  function fillBand(c, s0, e0, k) {
+    c.beginPath();
+    for (let i = s0; i <= e0; i++) { const r = BR[i] * k; if (i === s0) c.moveTo(BX[i] + NX[i] * r, BY[i] + NY[i] * r); else c.lineTo(BX[i] + NX[i] * r, BY[i] + NY[i] * r); }
+    for (let i = e0; i >= s0; i--) { const r = BR[i] * k; c.lineTo(BX[i] - NX[i] * r, BY[i] - NY[i] * r); }
+    c.closePath(); c.fill();
   }
-  function cap(i, k) { ctx.beginPath(); ctx.arc(BX[i], BY[i], BR[i] * k, 0, Math.PI * 2); ctx.fill(); }
-  // n개 점(BX/BY = 위치, BR = 반폭, BA = 깊이 알파). glowA = glow 띠 알파 배율, depth = BA로 구간 나눔
+  function disc(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); }
+  // 획 겹침 처리: 글로우와 잉크를 각각 오프스크린 레이어에 'lighten'(채널별 최댓값)으로 그린다.
+  // 겹친 곳은 더 밝아지지 않고 둘 중 밝은 쪽만 남는다 → 마지막에 글로우(0.14) → 잉크 순서로 본 캔버스에 합성
+  const GL = document.createElement('canvas'), gctx = GL.getContext('2d'), CL = document.createElement('canvas'), cctx = CL.getContext('2d');
+  function layersBegin() {
+    [[GL, gctx], [CL, cctx]].forEach((p) => {
+      const c = p[0], g = p[1];
+      if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; }
+      g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, c.width, c.height);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0); g.globalCompositeOperation = 'lighten'; g.globalAlpha = 1;
+    });
+  }
+  function layersEnd() {
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 0.14; ctx.drawImage(GL, 0, 0); ctx.globalAlpha = 1; ctx.drawImage(CL, 0, 0);
+    ctx.restore();
+  }
+  const lvl = (a) => Math.min(7, Math.floor(a * 8));
+  // n개 점(BX/BY = 위치, BR = 반폭, BA = 깊이 0~1). glowA = 글로우 세기 배율, depth = BA로 어둡게 (layersBegin/End 사이에서 호출)
   function drawBand(n, glowA, depth) {
     if (n < 2) return;
     for (let i = 0; i < n; i++) {
@@ -279,25 +303,26 @@ function createEngine(cv, opt, cb) {
       NX[i] = -ty / l; NY[i] = tx / l; if (BR[i] < 0.3) BR[i] = 0.3;
     }
     let am = 1; if (depth) { am = 0; for (let i = 0; i < n; i++) am += BA[i]; am /= n; }
-    ctx.fillStyle = INK.glow; ctx.globalAlpha = 0.14 * glowA * am; fillBand(0, n - 1, 3.4);
-    for (let i = 0; i < n - 1; i++) BK[i] = inkIdx(BX[i], BY[i], BX[i + 1], BY[i + 1]) + (depth ? 16 * Math.min(7, Math.floor(((BA[i] + BA[i + 1]) / 2) * 8)) : 0);
+    gctx.fillStyle = INK.gd[Math.round(clamp(glowA * am, 0, 1) * 8)]; fillBand(gctx, 0, n - 1, 3.4);
+    for (let i = 0; i < n - 1; i++) BK[i] = inkIdx(BX[i], BY[i], BX[i + 1], BY[i + 1]) + 16 * (depth ? lvl((BA[i] + BA[i + 1]) / 2) : 8);
     let s0 = 0;
     while (s0 < n - 1) {
       let e = s0; while (e + 1 < n - 1 && BK[e + 1] === BK[s0]) e++;
-      ctx.fillStyle = INK.shades[BK[s0] & 15]; ctx.globalAlpha = depth ? ((BK[s0] >> 4) + 0.5) / 8 : 1;
-      fillBand(s0, e + 1, 1); s0 = e + 1;
+      cctx.fillStyle = INK.sd[BK[s0]]; fillBand(cctx, s0, e + 1, 1); s0 = e + 1;
     }
-    ctx.fillStyle = INK.shades[BK[0] & 15]; ctx.globalAlpha = depth ? BA[0] : 1; cap(0, 1);
-    ctx.fillStyle = INK.shades[BK[n - 2] & 15]; ctx.globalAlpha = depth ? BA[n - 1] : 1; cap(n - 1, 1);
+    cctx.fillStyle = INK.sd[(BK[0] & 15) + 16 * (depth ? lvl(BA[0]) : 8)]; disc(cctx, BX[0], BY[0], BR[0]);
+    cctx.fillStyle = INK.sd[(BK[n - 2] & 15) + 16 * (depth ? lvl(BA[n - 1]) : 8)]; disc(cctx, BX[n - 1], BY[n - 1], BR[n - 1]);
   }
+  const tips = [];
   function drawWriting(t) {
+    layersBegin(); tips.length = 0;
     LT.strokes.forEach((s) => {
       const raw = clamp((t - s.t0) / (s.t1 - s.t0), 0, 1); if (raw <= 0) return;
       const p = 0.5 - 0.5 * Math.cos(Math.PI * raw);   // 획마다 펜이 가속했다 감속한다
       if (s.dot) {
         const x = s.dot.x * ls + lox, y = s.dot.y * ls + loy, r = s.dot.r * ls * INK.w * 1.15 * eOut(p);
-        ctx.fillStyle = INK.glow; ctx.globalAlpha = 0.14; ctx.beginPath(); ctx.arc(x, y, r * 2.4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = INK.light; ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        gctx.fillStyle = INK.gd[8]; disc(gctx, x, y, r * 2.4);
+        cctx.fillStyle = INK.ld[8]; disc(cctx, x, y, r);
         return;
       }
       const lim = p * s.len, pts = s.pts, k = BASE * ls * INK.w * 0.5; let n = 0;
@@ -307,8 +332,10 @@ function createEngine(cv, opt, cb) {
         BX[n] = b.x * ls + lox; BY[n] = b.y * ls + loy; BR[n] = b.w * k; n++;
       }
       drawBand(n, 1, false);
-      if (raw < 1 && n > 0) { const z = (40 + 26 * Math.sin(Math.PI * raw)) * ls; ctx.globalAlpha = 0.9; ctx.drawImage(sprite(INK.hot), BX[n - 1] - z / 2, BY[n - 1] - z / 2, z, z); }
+      if (raw < 1 && n > 0) tips.push([BX[n - 1], BY[n - 1], (40 + 26 * Math.sin(Math.PI * raw)) * ls]);
     });
+    layersEnd();
+    ctx.globalAlpha = 0.9; tips.forEach((q) => ctx.drawImage(sprite(INK.hot), q[0] - q[2] / 2, q[1] - q[2] / 2, q[2], q[2]));   // 펜 끝 불빛은 잉크 위에
     ctx.globalAlpha = 1;
   }
 
@@ -387,13 +414,14 @@ function createEngine(cv, opt, cb) {
   function drawLines(t) {
     const rr = radiusAt(t), ph = Math.max(0, t - T.go) * 0.00038, ca = Math.cos(ph), sa = Math.sin(ph);
     const shrink = clamp(rr / r0, 0, 1);
+    layersBegin();
     for (const L of lines) {
       const tr = L.tr, nT = tr.length;
       if (L.dot) {
         projL(tr[nT - 1], ca, sa, pa); const dep = clamp(0.35 + 0.65 * (pa[2] / Math.max(r0, 1) + 1) / 2, 0.3, 1);
-        const r = L.dot * INK.w * 1.15 * pa[3] * (0.4 + 0.6 * shrink);
-        ctx.fillStyle = INK.glow; ctx.globalAlpha = 0.14 * dep; ctx.beginPath(); ctx.arc(pa[0], pa[1], r * 2.4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = INK.light; ctx.globalAlpha = dep; ctx.beginPath(); ctx.arc(pa[0], pa[1], r, 0, Math.PI * 2); ctx.fill();
+        const r = L.dot * INK.w * 1.15 * pa[3] * (0.4 + 0.6 * shrink), dl = Math.round(dep * 8);
+        gctx.fillStyle = INK.gd[dl]; disc(gctx, pa[0], pa[1], r * 2.4);
+        cctx.fillStyle = INK.ld[dl]; disc(cctx, pa[0], pa[1], r);
         continue;
       }
       // 머리에서 뒤로 len만큼 걸어가며 점을 모은다 (u: 0=꼬리 .. 1=머리)
@@ -410,6 +438,7 @@ function createEngine(cv, opt, cb) {
       }
       drawBand(n, 1, true);
     }
+    layersEnd();
     // 점으로 모이는 코어
     const g = clamp((t - T.go - T.wrapDur * 0.55) / (T.wrapDur * 0.45), 0, 1);
     if (g > 0) {
@@ -448,15 +477,12 @@ function createEngine(cv, opt, cb) {
     if (bl > 0) drawBrain(now, dt, bl, 1);
     if (a > 1950) { mode = 'main'; mainT0 = now - 900; dustT0 = now - 5000; cb.onMain(); }
   }
-  function drawCaption(t) {
-    const fade = t < T.burst ? clamp(t / 400, 0, 1) : clamp(1 - (t - T.burst) / 300, 0, 1); if (fade <= 0) return;
-    const pct = Math.floor(clamp(t / T.burst, 0, 1) * 100);
-    const y = Cy + LT.b.h * ls * 0.5 + 70;
-    ctx.globalAlpha = fade * 0.85; ctx.fillStyle = '#8A91A1'; ctx.font = '400 ' + Math.round(24 * opt.fonts.k) + 'px ' + opt.fonts.script; ctx.textAlign = 'center';
-    ctx.fillText('Initializing second brain  ' + String(pct).padStart(3, '0') + '%', Cx, y);
-    ctx.globalAlpha = fade * 0.25; ctx.fillRect(Cx - 90, y + 14, 180, 1);
-    ctx.globalAlpha = fade; ctx.fillStyle = INK.base; ctx.fillRect(Cx - 90, y + 14, 180 * pct / 100, 1);
-    ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+  // 로딩 표시 = 이니셜 뒤의 마법진(js/sigil.js)이 그려지는 정도. 터지는 순간 살짝 커지며 사라진다
+  // SIG_A: 마법진 전체 세기 (낮을수록 배경처럼 은은하게, 시선은 이니셜에)
+  const SIG = opt.intro && typeof createSigil === 'function' ? createSigil() : null, SIG_A = 0.55;
+  function drawSigil(t) {
+    const u = clamp((t - T.burst) / 1100, 0, 1); if (u >= 1) return;
+    SIG.draw(ctx, { cx: Cx, cy: Cy, R: Math.min(W, H) * 0.44, p: clamp((t - 150) / (T.pt - 150), 0, 1), a: SIG_A * (1 - eIn(u)), s: 1 + 0.12 * eOut(u), tau: t, W: W, H: H, dpr: dpr });
   }
 
 
@@ -854,10 +880,10 @@ function createEngine(cv, opt, cb) {
     if (world && aW > 0) { const C = wCenter(), q = rgbOf(world.color), wb = ctx.createRadialGradient(C[0], C[1], 0, C[0], C[1], Math.max(W, H) * 0.6); wb.addColorStop(0, 'rgba(' + q.join(',') + ',' + (0.16 * aW) + ')'); wb.addColorStop(1, 'rgba(1,1,2,0)'); ctx.fillStyle = wb; ctx.fillRect(0, 0, W, H); }
     if (mode === 'intro') {
       const t = now - t0;
+      if (SIG) drawSigil(t);
       if (t < T.writeEnd) drawWriting(t);
       else if (t < T.burst) { if (!lines) buildLines(); const span = Math.min(t - simT, 100), nsub = Math.max(1, Math.ceil(span / STEP)); if (t - simT > 100) simT = t - 100; for (let k = 0; k < nsub; k++) { const h = (t - simT) / (nsub - k); simT += h; if (h > 0) simStep(simT, h / 1000); } drawLines(t); }
       else { if (!parts) { makeParticles(); if (cb.onBurst) cb.onBurst(); } drawParticles(t - T.burst, now, dt); }
-      drawCaption(t);
     } else {
       if (mode === 'main') {
         if (!st.drag && st.mx > -999) { const h = hitTest(st.mx, st.my); if (h !== st.hover) { st.hover = h; cv.style.cursor = h >= 0 ? 'pointer' : 'grab'; cb.onHover(h); } }

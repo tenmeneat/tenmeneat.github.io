@@ -102,6 +102,7 @@
   let leaveT = 0;
   function render() {
     const ph = state.phase, main = ph === 'main';
+    document.documentElement.classList.toggle('intro-lock', ph === 'intro');
     $('hdr').classList.toggle('is-hidden', ph === 'intro' || ph === 'dive');
     ['hero', 'legend', 'cue'].forEach((id) => $(id).classList.toggle('is-hidden', !(main || ph === 'rise')));   // 돌아오는 중(rise)에 미리 떠오르기 시작 (CSS 지연 .45s)
     $('btn-skip').hidden = ph !== 'intro';
@@ -124,7 +125,8 @@
     }
     document.querySelectorAll('.sec').forEach((el) => { el.hidden = wOn; });   // 월드 안에서는 페이지가 스크롤되지 않는다 (아래로 내리는 대신 행성을 눌러 들어간다)
   }
-  function set(patch) { Object.assign(state, patch); if (window.BG) window.BG.setMode(state.phase); render(); }
+  const lightUp = () => document.documentElement.classList.remove('intro-dark');   // 인트로 배경(새까만 화면) 해제 → 배경 레이어 페이드인
+  function set(patch) { Object.assign(state, patch); if (state.phase !== 'intro') lightUp(); if (window.BG) window.BG.setMode(state.phase); render(); }
 
   function openNote(j) { location.hash = '#/note/' + encodeURIComponent(G.nodes[j].name); }   // js/reader.js가 hashchange로 연다
   function enter(i) {
@@ -155,7 +157,7 @@
       fonts: { script: S.css, k: S.k, body: "'Noto Sans KR', sans-serif", mono: "'Noto Sans KR', sans-serif" },
       introFont: CONFIG.introFont, ink: CONFIG.introInk, inkScale: CONFIG.introThickness
     }, {
-      onBurst: () => { if (window.BG) window.BG.setMode('main'); },   // 파티클이 흩어지는 순간부터 배경 유체도 그래프 쪽으로 흐르기 시작
+      onBurst: () => { lightUp(); if (window.BG) window.BG.setMode('main'); },   // 파티클이 흩어지는 순간부터 배경 유체도 그래프 쪽으로 흐르기 시작
       onMain: () => set({ phase: 'main' }),
       onHover: () => {},
       onDive: () => set({ phase: 'dive' }),

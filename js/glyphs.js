@@ -22,7 +22,7 @@ function buildLetters(fk) {
     });
     total += st.len; strokes.push(st);
   });
-  const speed = total / 1900; let cur = 350;
+  const speed = total / 1900; let cur = 1500;   // 첫 획 시작 시각(ms): 그 전까지는 마법진만 먼저 그려지기 시작한다 (인트로 전체 +1.15초)
   strokes.forEach((st) => { const dur = st.dot ? 140 : Math.max(120, st.len / speed); st.t0 = cur; st.t1 = cur + dur; cur = st.t1 + 110; });
   const T = { writeEnd: cur }; T.go = cur + 300; T.wrapDur = 2700; T.pt = T.go + T.wrapDur; T.burst = T.pt + 280;
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
