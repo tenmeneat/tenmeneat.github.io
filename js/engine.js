@@ -103,15 +103,6 @@ function buildGraph() {
 }
 const GRAPH = buildGraph();
 
-// 작은 플렉서스 구(월드의 행성) — 공용 기하
-const GLOBE = (function () {
-  const rr = mkRng(91), v = [];
-  for (let i = 0; i < 46; i++) { const d = fibDir(i, 46), j = randDir(rr); v.push(norm3([d[0] + j[0] * 0.14, d[1] + j[1] * 0.14, d[2] + j[2] * 0.14])); }
-  const t = []; plexus(v, v.map((_, i) => i), 4, 0.75, t, 0);
-  const e = {}; t.forEach((q) => { const a = q.v; [[a[0], a[1]], [a[1], a[2]], [a[0], a[2]]].forEach((p) => { e[p[0] + '-' + p[1]] = p; }); });
-  return { v: v, t: t.map((q) => q.v), e: Object.keys(e).map((k) => e[k]) };
-})();
-
 // 노드 i의 "세계": 프로젝트 노드면 그 프로젝트, 아니면 이 주제로 진행한 프로젝트들
 function relatedProjects(i) {
   const G = GRAPH, n = G.nodes[i], score = {};
@@ -669,15 +660,20 @@ function createEngine(cv, opt, cb) {
       planets: s.ids.map((j, k) => ({ label: G.nodes[j].name.replace(/^[^-\s]+-/, ''), no: String(k + 1).padStart(2, '0'), color: base.color, w: G.adj[j].size, act: { note: j }, link: true })) };
   }
   function buildWorld(i, base) {
-    const w = base || worldOf(i), r0 = mkRng(1000 + i * 13 + (w.sec ? w.secInfo.ids.length * 31 + 7 : 0)), NF = 260, fib = [];
-    for (let k = 0; k < NF; k++) {
-      const f = fibDir(k, NF), j = randDir(r0), d = norm3([f[0] + j[0] * 0.35, f[1] + j[1] * 0.35, f[2] + j[2] * 0.35]);
-      const len = 0.4 + 0.6 * Math.pow(r0(), 0.55);
-      fib.push({ d: d, len: len, tw: norm3(cross3(d, randDir(r0))), amp: 0.1 + 0.32 * r0(), ph: r0() * 6.28, bud: len > 0.72, delay: r0() * 450 });
-    }
-    w.fib = fib; w.light = mix(w.color, '#FFFFFF', 0.55);
+    const w = base || worldOf(i), r0 = mkRng(1000 + i * 13 + (w.sec ? w.secInfo.ids.length * 31 + 7 : 0));
+    w.light = mix(w.color, '#FFFFFF', 0.55); w.deep = mix(w.color, '#000000', 0.6);
     const n = w.planets.length, maxW = Math.max(1, ...w.planets.map((p) => p.w));
-    w.planets.forEach((p, k) => { p.a0 = (k / Math.max(1, n)) * Math.PI * 2 + 0.9; p.rad = 0.55 + 0.45 * Math.sqrt(p.w / maxW); p.spin = r0() * 6.28; p.sx = -9999; p.sy = -9999; p.sr = 0; p.z = 0; });
+    w.planets.forEach((p, k) => {
+      p.a0 = (k / Math.max(1, n)) * Math.PI * 2 + 0.9; p.rad = 0.55 + 0.45 * Math.sqrt(p.w / maxW); p.spin = r0() * 6.28; p.sx = -9999; p.sy = -9999; p.sr = 0; p.z = 0;
+      p.light = mix(p.color, '#FFFFFF', 0.55); p.rgb = rgbOf(p.color).join(','); p.ringC = mix(p.color, '#F4DEAA', 0.55);
+      // 링 수 = 하위 노트 수(섹션) / 링크 수(노트), ponytail: 12개에서 자름 — 그 이상은 구가 링에 묻힌다
+      const nr = clamp(Math.round(p.w), 1, 12);
+      p.rings = Array.from({ length: nr }, (_, q) => {
+        const f = fibDir(q, nr * 2), j = randDir(r0), nm = norm3([f[0] + j[0] * 0.15, f[1] + j[1] * 0.15, f[2] + j[2] * 0.15]);
+        const u = norm3(cross3(nm, Math.abs(nm[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
+        return { u: u, v: cross3(nm, u), r: nr > 1 ? 1.35 + 0.55 * q / (nr - 1) : 1.6, ph: r0() * 6.28, sp: (0.0004 + r0() * 0.0005) * (r0() < 0.5 ? -1 : 1) };
+      });
+    });
     st.wyaw = 0; st.wpitch = 0; wHover = -1;
     return w;
   }
@@ -729,16 +725,153 @@ function createEngine(cv, opt, cb) {
     const x1 = p[0] * wcy_ + p[2] * wsy_, z1 = -p[0] * wsy_ + p[2] * wcy_, y2 = p[1] * wcp_ - z1 * wsp_, z2 = p[1] * wsp_ + z1 * wcp_, s = 3.4 / (3.4 - z2);
     out[0] = C[0] + x1 * s * C[2] * s0; out[1] = C[1] - y2 * s * C[2] * s0; out[2] = z2; out[3] = s; return out;
   }
-  function drawGlobe(p, x, y, r, a, now) {
-    const sa = now * 0.00035 + p.spin, ca = Math.cos(sa), sn = Math.sin(sa), ct = Math.cos(0.45), stt = Math.sin(0.45);
-    const V = GLOBE.v.map((v) => { const x1 = v[0] * ca + v[2] * sn, z1 = -v[0] * sn + v[2] * ca, y2 = v[1] * ct - z1 * stt, z2 = v[1] * stt + z1 * ct; return [x + x1 * r, y - y2 * r, z2]; });
-    const fF = new Path2D(), fB2 = new Path2D(), E = new Path2D();
-    GLOBE.t.forEach((t) => { const A = V[t[0]], B = V[t[1]], C = V[t[2]], P = (A[2] + B[2] + C[2]) / 3 > 0 ? fF : fB2; P.moveTo(A[0], A[1]); P.lineTo(B[0], B[1]); P.lineTo(C[0], C[1]); P.closePath(); });
-    GLOBE.e.forEach((e) => { const A = V[e[0]], B = V[e[1]]; E.moveTo(A[0], A[1]); E.lineTo(B[0], B[1]); });
-    ctx.fillStyle = p.color; ctx.globalAlpha = 0.05 * a; ctx.fill(fB2); ctx.globalAlpha = 0.16 * a; ctx.fill(fF);
-    ctx.strokeStyle = mix(p.color, '#FFFFFF', 0.3); ctx.lineWidth = 0.8; ctx.globalAlpha = 0.45 * a; ctx.stroke(E);
-    ctx.fillStyle = '#FFFFFF';
-    V.forEach((v) => { if (v[2] < -0.1) return; ctx.globalAlpha = (0.35 + 0.6 * v[2]) * a; ctx.fillRect(v[0] - 0.9, v[1] - 0.9, 1.8, 1.8); });
+  // ---------- 오러리 : 혼천의 코어 + 인장 행성 ----------
+  const GOLD_L = '#F4DEAA', GOLD = '#D4AF6A', GOLD_D = '#7A5C32', TAU = Math.PI * 2;
+  const RINGS = [   // u·v = 링 평면 기저, r = 반지름, spin = y축 자전(rad/ms) — 적도는 아래 금빛 띠(BAND)가 맡는다
+    { u: [1, 0, 0], v: [0, 1, 0], r: 1, w: 0.9 },                      // 자오권
+    { u: [1, 0, 0], v: [0, 0.4, 0.917], r: 0.84, w: 0.9, spin: 0.00018 },   // 황도권
+    { u: [0.917, 0.4, 0], v: [0, 0, 1], r: 0.58, w: 0.8, spin: -0.0004 }    // 내부 링
+  ], rv = [0, 0, 0];
+  // ref: 금빛 고리(가는 동심 가닥 다발) + 금가루 + 수직 광선 + 떨어지는 불티
+  const CR = mkRng(77);
+  const BAND = Array.from({ length: 11 }, (_, k) => ({ r: 0.98 + k * 0.021 + (CR() - 0.5) * 0.008, a: 0.25 + 0.75 * Math.pow(CR(), 0.7) * (1 - Math.abs(k - 4) / 8), w: 0.5 + 0.5 * CR() }));
+  const DUST = Array.from({ length: 260 }, () => { const g = (CR() + CR() + CR() - 1.5) / 1.5; return { r: 1.09 + g * 0.2, y: (CR() - 0.5) * 0.06 * (1 + Math.abs(g) * 2), a0: CR() * TAU, w: 0.00006 + 0.00008 * CR(), s: 0.7 + CR() * 1.1, ph: CR() * TAU }; });
+  const SHELL = Array.from({ length: 220 }, (_, i) => fibDir(i, 220));
+  const RAIN = Array.from({ length: 34 }, () => ({ x: (CR() - 0.5) * 0.26, z: (CR() - 0.5) * 0.26, off: CR(), v: 0.00005 + CR() * 0.00006, len: 0.04 + CR() * 0.09 }));
+  function ringPt(R, t, sa, sc) {
+    const c = Math.cos(t) * R.r * sc, s = Math.sin(t) * R.r * sc, x = R.u[0] * c + R.v[0] * s, z = R.u[2] * c + R.v[2] * s;
+    rv[0] = x * Math.cos(sa) + z * Math.sin(sa); rv[1] = R.u[1] * c + R.v[1] * s; rv[2] = -x * Math.sin(sa) + z * Math.cos(sa); return rv;
+  }
+  // 뒤쪽 반(front=false)은 어두운 금, 앞쪽 반은 밝은 금 — 그 사이에 코어 구를 그려 깊이를 만든다
+  function drawArmillary(now, el, a, C, front) {
+    ctx.lineCap = 'round';
+    RINGS.forEach((R, i) => {
+      const g = eOut(clamp((el - 150 - i * 160) / 1500, 0, 1)); if (g <= 0.01) return;
+      const sa = (R.spin || 0) * now, t0 = i * 1.7, N = Math.max(2, Math.ceil(96 * g)), P = new Path2D();
+      let qx = 0, qy = 0, qz = 0;
+      for (let k = 0; k <= N; k++) {
+        wr(ringPt(R, t0 + (k / N) * g * TAU, sa, 1), 1, C, tmp);
+        if (k && (qz + tmp[2] > 0) === front) { P.moveTo(qx, qy); P.lineTo(tmp[0], tmp[1]); }
+        qx = tmp[0]; qy = tmp[1]; qz = tmp[2];
+      }
+      ctx.strokeStyle = front ? GOLD_L : GOLD_D; ctx.lineWidth = R.w * (front ? 1 : 0.8); ctx.globalAlpha = (front ? 0.6 : 0.45) * a; ctx.stroke(P);
+    });
+    ctx.lineCap = 'butt';
+    ctx.globalCompositeOperation = 'lighter';
+    if (!front) drawBeam(now, el, a, C);
+    drawStrands(now, el, a, C, front);
+    drawDust(now, el, a, C, front);
+    if (front) drawRain(now, el, a, C);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // 수직 광선(극축): 중심이 가장 밝고 양끝으로 사라진다
+  function drawBeam(now, el, a, C) {
+    const g = eOut(clamp((el - 250) / 1400, 0, 1)) * a; if (g <= 0.01) return;
+    const L = 2.6 * g; wr([0, -L, 0], 1, C, tmp); wr([0, L, 0], 1, C, tmp2);
+    const lg = ctx.createLinearGradient(tmp[0], tmp[1], tmp2[0], tmp2[1]);
+    lg.addColorStop(0, 'rgba(244,222,170,0)'); lg.addColorStop(0.5, 'rgba(244,222,170,1)'); lg.addColorStop(1, 'rgba(244,222,170,0)');
+    ctx.strokeStyle = lg; ctx.beginPath(); ctx.moveTo(tmp[0], tmp[1]); ctx.lineTo(tmp2[0], tmp2[1]);
+    ctx.lineWidth = 6; ctx.globalAlpha = 0.07 * g; ctx.stroke();
+    ctx.lineWidth = 1; ctx.globalAlpha = 0.75 * g; ctx.stroke();
+  }
+  // 적도 금빛 띠: 가는 동심 가닥 11개 + 바깥 눈금, 광선이 띠를 지나는 두 점에 플레어
+  function drawStrands(now, el, a, C, front) {
+    const g = eOut(clamp((el - 150) / 1600, 0, 1)); if (g <= 0.01) return;
+    const N = Math.max(2, Math.ceil(120 * g)), t0 = -Math.PI / 2;
+    BAND.forEach((B) => {
+      const P = new Path2D(); let qx = 0, qy = 0, qz = 0;
+      for (let k = 0; k <= N; k++) {
+        const t = t0 + (k / N) * g * TAU; rv[0] = Math.cos(t) * B.r; rv[1] = 0; rv[2] = Math.sin(t) * B.r; wr(rv, 1, C, tmp);
+        if (k && (qz + tmp[2] > 0) === front) { P.moveTo(qx, qy); P.lineTo(tmp[0], tmp[1]); }
+        qx = tmp[0]; qy = tmp[1]; qz = tmp[2];
+      }
+      ctx.strokeStyle = front ? GOLD : GOLD_D; ctx.lineWidth = B.w; ctx.globalAlpha = B.a * (front ? 0.75 : 0.55) * a; ctx.stroke(P);
+    });
+    const T = new Path2D();
+    for (let k = 0; k < 72; k++) {
+      const t = k / 72 * TAU; if ((((t - t0) % TAU) + TAU) % TAU > g * TAU) continue;
+      rv[0] = Math.cos(t) * 1.22; rv[1] = 0; rv[2] = Math.sin(t) * 1.22; wr(rv, 1, C, tmp); if ((tmp[2] > 0) !== front) continue;
+      const r2 = k % 6 ? 1.25 : 1.3; rv[0] = Math.cos(t) * r2; rv[2] = Math.sin(t) * r2; wr(rv, 1, C, tmp2); T.moveTo(tmp[0], tmp[1]); T.lineTo(tmp2[0], tmp2[1]);
+    }
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 0.7; ctx.globalAlpha = (front ? 0.5 : 0.3) * a; ctx.stroke(T);
+    // 화면상 광선과 띠가 겹치는 점(회전 후 x = 0)
+    const fa = clamp((el - 1300) / 800, 0, 1) * a; if (fa <= 0.01) return;
+    const t1 = Math.atan2(-wcy_, wsy_);
+    [t1, t1 + Math.PI].forEach((t) => {
+      rv[0] = Math.cos(t) * 1.08; rv[1] = 0; rv[2] = Math.sin(t) * 1.08; wr(rv, 1, C, tmp); if ((tmp[2] > 0) !== front) return;
+      const z = C[2] * (front ? 0.5 : 0.32) * (1 + 0.08 * Math.sin(now / 900 + t)); ctx.globalAlpha = (front ? 0.9 : 0.5) * fa;
+      ctx.drawImage(sprite(GOLD_L), tmp[0] - z / 2, tmp[1] - z / 2, z, z);
+    });
+  }
+  // 띠를 따라 천천히 도는 금가루(반짝임)
+  function drawDust(now, el, a, C, front) {
+    const g = clamp((el - 700) / 1200, 0, 1) * a; if (g <= 0.01) return;
+    ctx.fillStyle = front ? GOLD_L : GOLD;
+    DUST.forEach((d) => {
+      const th = d.a0 + now * d.w; rv[0] = Math.cos(th) * d.r; rv[1] = d.y; rv[2] = Math.sin(th) * d.r; wr(rv, 1, C, tmp);
+      if ((tmp[2] > 0) !== front) return;
+      const tw = 0.5 + 0.5 * Math.sin(now * 0.0021 + d.ph), s = d.s * tmp[3];
+      ctx.globalAlpha = (0.2 + 0.8 * tw * tw) * (front ? 0.9 : 0.4) * g; ctx.fillRect(tmp[0] - s / 2, tmp[1] - s / 2, s, s);
+    });
+  }
+  // 코어 아래로 광선을 따라 떨어지는 불티
+  function drawRain(now, el, a, C) {
+    const g = clamp((el - 1500) / 1200, 0, 1) * a; if (g <= 0.01) return;
+    ctx.strokeStyle = GOLD_L; ctx.lineWidth = 0.9;
+    RAIN.forEach((d) => {
+      const u = (d.off + now * d.v) % 1, y = -0.32 - u * 1.7;
+      rv[0] = d.x; rv[1] = y; rv[2] = d.z; wr(rv, 1, C, tmp); rv[1] = y + d.len; wr(rv, 1, C, tmp2);
+      ctx.globalAlpha = Math.sin(Math.PI * u) * (1 - u) * 0.8 * g; ctx.beginPath(); ctx.moveTo(tmp[0], tmp[1]); ctx.lineTo(tmp2[0], tmp2[1]); ctx.stroke();
+    });
+  }
+  // 코어: 반짝이는 입자 껍질 + 프로젝트 색 플라스마 + 뜨거운 중심점
+  function drawCore(now, el, a, C) {
+    const g = eOut(clamp((el - 100) / 900, 0, 1)) * a; if (g <= 0.01) return;
+    ctx.globalCompositeOperation = 'lighter';
+    const halo = C[2] * 3; ctx.globalAlpha = 0.2 * g; ctx.drawImage(sprite(world.color), C[0] - halo / 2, C[1] - halo / 2, halo, halo);
+    const gl = C[2] * 0.95 * (1 + 0.04 * Math.sin(now / 700)); ctx.globalAlpha = 0.55 * g; ctx.drawImage(sprite(world.color), C[0] - gl / 2, C[1] - gl / 2, gl, gl);
+    const sa = now * 0.00025, cs = Math.cos(sa), sn = Math.sin(sa), R = 0.3 * g, BK = new Path2D(), FR = new Path2D();
+    SHELL.forEach((v) => {
+      rv[0] = (v[0] * cs + v[2] * sn) * R; rv[1] = v[1] * R; rv[2] = (-v[0] * sn + v[2] * cs) * R; wr(rv, 1, C, tmp);
+      const s = 1.3 * tmp[3]; (tmp[2] > 0 ? FR : BK).rect(tmp[0] - s / 2, tmp[1] - s / 2, s, s);
+    });
+    ctx.fillStyle = world.color; ctx.globalAlpha = 0.45 * g; ctx.fill(BK);
+    ctx.fillStyle = world.light; ctx.globalAlpha = 0.9 * g; ctx.fill(FR);
+    const hz = C[2] * 0.42; ctx.globalAlpha = 0.85 * g; ctx.drawImage(sprite(GOLD_L), C[0] - hz / 2, C[1] - hz / 2, hz, hz);
+    ctx.globalAlpha = g; ctx.fillStyle = '#FFF8E6'; ctx.beginPath(); ctx.arc(C[0], C[1], 2.4, 0, TAU); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // 행성: 프로젝트 색 구 + 하위 노트 수만큼의 링(자이로처럼 서로 다른 기울기), 링마다 도는 구슬 하나
+  const pq = [0, 0, 0];
+  function orbPt(R, t, sc, cy, sy, out) {
+    const c = Math.cos(t) * R.r, s = Math.sin(t) * R.r, x = R.u[0] * c + R.v[0] * s, y = R.u[1] * c + R.v[1] * s, z = R.u[2] * c + R.v[2] * s;
+    const x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
+    out[0] = x1 * sc; out[1] = -(y * 0.94 - z1 * 0.34) * sc; out[2] = y * 0.34 + z1 * 0.94; return out;
+  }
+  function drawOrb(p, x, y, r, a, now, hl) {
+    const rs = r * 0.48, ya = now * 0.00022 + p.spin, cy = Math.cos(ya), sy = Math.sin(ya), BK = new Path2D(), FR = new Path2D();
+    const beads = [];
+    p.rings.forEach((R) => {
+      let qx = 0, qy = 0, qz = 0;
+      for (let k = 0; k <= 40; k++) {
+        orbPt(R, k / 40 * TAU, rs, cy, sy, pq);
+        if (k) { const P = qz + pq[2] > 0 ? FR : BK; P.moveTo(x + qx, y + qy); P.lineTo(x + pq[0], y + pq[1]); }
+        qx = pq[0]; qy = pq[1]; qz = pq[2];
+      }
+      orbPt(R, R.ph + now * R.sp, rs, cy, sy, pq); beads.push([x + pq[0], y + pq[1], pq[2]]);
+    });
+    const bead = (front) => { ctx.fillStyle = front ? '#FFF8E6' : p.ringC; beads.forEach((b) => { if ((b[2] > 0) !== front) return; ctx.globalAlpha = (front ? 0.95 : 0.4) * a; ctx.beginPath(); ctx.arc(b[0], b[1], front ? 1.5 : 1.1, 0, TAU); ctx.fill(); }); };
+    ctx.strokeStyle = p.ringC; ctx.lineWidth = 0.7; ctx.globalAlpha = (hl ? 0.5 : 0.3) * a; ctx.stroke(BK); bead(false);
+    // 광원: 흰 중심 → 프로젝트 색 → 투명한 코로나 (가산 합성이라 뒤 링이 빛 속으로 녹아든다)
+    ctx.globalCompositeOperation = 'lighter';
+    const fl = 1 + 0.06 * Math.sin(now / 520 + p.spin * 3), cz = rs * 5 * fl;
+    ctx.globalAlpha = (hl ? 0.75 : 0.55) * a; ctx.drawImage(sprite(p.color), x - cz / 2, y - cz / 2, cz, cz);
+    const R2 = rs * 1.15 * fl, gr = ctx.createRadialGradient(x, y, 0, x, y, R2);
+    gr.addColorStop(0, '#FFFFFF'); gr.addColorStop(0.28, p.light); gr.addColorStop(0.62, 'rgba(' + p.rgb + ',0.75)'); gr.addColorStop(1, 'rgba(' + p.rgb + ',0)');
+    ctx.globalAlpha = a; ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, R2, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(x, y, Math.max(1, rs * 0.22), 0, TAU); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = p.ringC; ctx.lineWidth = hl ? 1 : 0.8; ctx.globalAlpha = (hl ? 1 : 0.8) * a; ctx.stroke(FR); bead(true);
   }
   function drawWorld(now, dt, aW, gW, zt) {
     if (!world || aW <= 0.002) return;
@@ -759,14 +892,13 @@ function createEngine(cv, opt, cb) {
       world.planets.forEach((p, k) => {
         if ((p.z >= 0) !== front || p.pa <= 0.01) return;
         const a = p.pa * (0.55 + 0.45 * clamp((p.z + Ro) / (2 * Ro), 0, 1)), focus = (world.focus && p.act.sec === world.focus) || (p.act.note !== undefined && world.pick === p.act.note), hv = k === wHover;
-        // tether + pulse
+        // 오러리 암: 코어 가장자리에서 행성까지 곧은 금선
+        const dx = p.sx - C[0], dy = p.sy - C[1], dd = Math.hypot(dx, dy), r0 = C[2] * 1.12;
+        if (dd > r0 + p.sr) { ctx.strokeStyle = GOLD_D; ctx.lineWidth = 0.8; ctx.globalAlpha = (focus || hv ? 0.9 : 0.5) * a; ctx.beginPath(); ctx.moveTo(C[0] + dx / dd * r0, C[1] + dy / dd * r0); ctx.lineTo(p.sx - dx / dd * p.sr, p.sy - dy / dd * p.sr); ctx.stroke(); }
         ctx.globalCompositeOperation = 'lighter';
-        const mx = (C[0] + p.sx) / 2, my = (C[1] + p.sy) / 2 - C[2] * 0.35;
-        ctx.strokeStyle = p.color; ctx.lineWidth = 0.8; ctx.globalAlpha = (focus || hv ? 0.5 : 0.18) * a; ctx.beginPath(); ctx.moveTo(C[0], C[1]); ctx.quadraticCurveTo(mx, my, p.sx, p.sy); ctx.stroke();
-        const u = (now * 0.00035 + k * 0.37) % 1; qpt(C[0], C[1], mx, my, p.sx, p.sy, u, ep); ctx.globalAlpha = Math.sin(Math.PI * u) * a; ctx.drawImage(sprite(p.color), ep[0] - 7, ep[1] - 7, 14, 14);
-        const gz = p.sr * 4; ctx.globalAlpha = (0.35 + (focus || hv ? 0.3 : 0)) * a; ctx.drawImage(sprite(p.color), p.sx - gz / 2, p.sy - gz / 2, gz, gz);
-        drawGlobe(p, p.sx, p.sy, p.sr, a, now);
+        const gz = p.sr * 3; ctx.globalAlpha = (0.22 + (focus || hv ? 0.25 : 0)) * a; ctx.drawImage(sprite(p.color), p.sx - gz / 2, p.sy - gz / 2, gz, gz);
         ctx.globalCompositeOperation = 'source-over';
+        drawOrb(p, p.sx, p.sy, p.sr, a, now, focus || hv);
         if (focus || hv) { const f = (now / 1300) % 1; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1; ctx.globalAlpha = 0.85 * a; ctx.beginPath(); ctx.arc(p.sx, p.sy, p.sr + 7, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = (1 - f) * 0.5 * a; ctx.beginPath(); ctx.arc(p.sx, p.sy, p.sr + 7 + f * 16, 0, Math.PI * 2); ctx.stroke(); }
         if (lbl <= 0.01) { ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; return; }
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.globalAlpha = a * lbl;
@@ -779,36 +911,29 @@ function createEngine(cv, opt, cb) {
         ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
       });
     };
-    // dotted orbit
-    ctx.setLineDash([1.2, 7]); ctx.strokeStyle = world.light; ctx.lineWidth = 1; ctx.globalAlpha = 0.22 * aW * clamp((el - 300) / 800, 0, 1); ctx.beginPath();
-    for (let k = 0; k <= 140; k++) { const th = k / 140 * Math.PI * 2, X = Math.cos(th) * Ro, Z = Math.sin(th) * Ro, s = 6 / (6 - Z * tC), xx = C[0] + X * s * C[2], yy = C[1] + Z * tS * s * C[2] * 0.95; if (k) ctx.lineTo(xx, yy); else ctx.moveTo(xx, yy); }
-    ctx.stroke(); ctx.setLineDash([]);
+    // 궤도(점선) + 순서 호(01→02→…) — 앞/뒤로 나눠 코어 앞뒤에 그린다
+    const orb = (th, o) => { const X = Math.cos(th) * Ro, Z = Math.sin(th) * Ro, s = 6 / (6 - Z * tC); o[0] = C[0] + X * s * C[2]; o[1] = C[1] + Z * tS * s * C[2] * 0.95; return Z >= 0; };
+    const OD = [new Path2D(), new Path2D()], OA = [new Path2D(), new Path2D()], np = world.planets.length, ord = np > 1 && !!world.planets[0].no;
+    const th0 = ord ? world.planets[0].a0 + el * 0.00005 + st.wyaw * 0.35 : 0, step = TAU / Math.max(1, np), arcEnd = (np - 1) * step;
+    for (let k = 0; k < 140; k++) {
+      const ta = k / 140 * TAU, tb = (k + 1) / 140 * TAU, f = orb((ta + tb) / 2, ep) ? 1 : 0;
+      orb(ta, ep); OD[f].moveTo(ep[0], ep[1]); orb(tb, ep); OD[f].lineTo(ep[0], ep[1]);
+      if (ord) { const ua = (((ta - th0) % TAU) + TAU) % TAU; if (ua + TAU / 140 <= arcEnd + 1e-6) { orb(ta, ep); OA[f].moveTo(ep[0], ep[1]); orb(tb, ep); OA[f].lineTo(ep[0], ep[1]); } }
+    }
+    const oA = aW * clamp((el - 300) / 800, 0, 1), aA = aW * clamp((el - 900) / 900, 0, 1);
+    const drawOrbit = (f) => {
+      ctx.setLineDash([1.2, 7]); ctx.strokeStyle = world.light; ctx.lineWidth = 1; ctx.globalAlpha = 0.22 * oA; ctx.stroke(OD[f]); ctx.setLineDash([]);
+      if (ord) { ctx.strokeStyle = GOLD_L; ctx.lineWidth = 1; ctx.globalAlpha = (f ? 0.45 : 0.25) * aA; ctx.stroke(OA[f]); }
+    };
+    drawOrbit(0);
     drawP(false);
-    // the wires bloom (ref: Wires)
-    ctx.globalCompositeOperation = 'lighter';
-    const halo = C[2] * 3.4; ctx.globalAlpha = 0.32 * aW * gW; ctx.drawImage(sprite(world.color), C[0] - halo / 2, C[1] - halo / 2, halo, halo);
-    const FP = [new Path2D(), new Path2D(), new Path2D(), new Path2D()], BP = [new Path2D(), new Path2D()], TIP = new Path2D();
-    const z0 = [0, 0, 0];
-    world.fib.forEach((f) => {
-      const g = eOut(clamp((el - f.delay) / 1300, 0, 1)) * gW; if (g <= 0.01) return;
-      const L = f.len * g, w = f.amp * L * (1 + 0.15 * Math.sin(now * 0.0011 + f.ph));
-      wr([f.d[0] * L * 0.5 + f.tw[0] * w, f.d[1] * L * 0.5 + f.tw[1] * w, f.d[2] * L * 0.5 + f.tw[2] * w], 1, C, tmp);
-      wr([f.d[0] * L, f.d[1] * L, f.d[2] * L], 1, C, tmp2);
-      const b = Math.min(3, Math.floor(clamp((tmp2[2] / Math.max(L, 0.05) + 1) / 2, 0, 0.999) * 4));
-      FP[b].moveTo(C[0], C[1]); FP[b].quadraticCurveTo(tmp[0], tmp[1], tmp2[0], tmp2[1]);
-      if (f.bud && g > 0.82) {
-        const ang = Math.atan2(tmp2[1] - tmp[1], tmp2[0] - tmp[0]), s = tmp2[3], bf = b > 1 ? 1 : 0, lx = 5 * s, wy = 2 * s;
-        BP[bf].moveTo(tmp2[0] + Math.cos(ang) * lx, tmp2[1] + Math.sin(ang) * lx); BP[bf].ellipse(tmp2[0], tmp2[1], lx, wy, ang, 0, Math.PI * 2);
-        TIP.rect(tmp2[0] + Math.cos(ang) * lx * 0.6 - 0.9, tmp2[1] + Math.sin(ang) * lx * 0.6 - 0.9, 1.8, 1.8);
-      }
-    });
-    ctx.lineWidth = 0.75;
-    for (let b = 0; b < 4; b++) { ctx.strokeStyle = b < 2 ? world.color : world.light; ctx.globalAlpha = [0.1, 0.16, 0.22, 0.32][b] * aW; ctx.stroke(FP[b]); }
-    ctx.fillStyle = world.light; ctx.globalAlpha = 0.35 * aW; ctx.fill(BP[0]); ctx.globalAlpha = 0.8 * aW; ctx.fill(BP[1]);
-    ctx.fillStyle = '#FFFFFF'; ctx.globalAlpha = 0.9 * aW; ctx.fill(TIP);
-    const core = C[2] * 1.3 * (1 + 0.04 * Math.sin(now / 500)); ctx.globalAlpha = 0.9 * aW * gW; ctx.drawImage(sprite('#FFFFFF'), C[0] - core / 2, C[1] - core / 2, core, core);
-    ctx.globalAlpha = aW * gW; ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(C[0], C[1], 2.6, 0, Math.PI * 2); ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
+    // 혼천의 코어: 뒤쪽 링 → 코어 구 → 앞쪽 링
+    drawArmillary(now, el, aW * gW, C, false);
+    drawCore(now, el, aW * gW, C);
+    drawArmillary(now, el, aW * gW, C, true);
+    drawOrbit(1);
+    // 순서 호를 따라 흐르는 빛(01 → 마지막)
+    if (ord && aA > 0.01) { const u = (now * 0.00012) % 1; orb(th0 + u * arcEnd, ep); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.sin(Math.PI * u) * aA; ctx.drawImage(sprite(world.color), ep[0] - 7, ep[1] - 7, 14, 14); ctx.globalCompositeOperation = 'source-over'; }
     drawP(true);
     if (zt) ctx.restore();
     ctx.globalAlpha = 1;
