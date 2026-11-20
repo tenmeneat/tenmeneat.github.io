@@ -511,7 +511,10 @@ function createEngine(cv, opt, cb) {
   // ---------- 과부하: 배경 마법진 글리치와 같은 순간, 한 지식 영역(허브 + 이웃)이 붉게 튀고 허브로 합선된다 ----------
   let OV = null;
   function overload(dur) {
-    if (mode !== 'main' || opt.reduce) return;
+    if (opt.reduce) return;
+    // 월드 안: 행성 하나가 과열 → 링이 붉게 떨리고 암을 따라 코어로 합선, 적도 띠 일부가 붉게 튄다 (전환 연출 중엔 쉰다)
+    if (mode === 'world' && world && world.planets.length && !pz && !dp && !pSet && !warp) { OV = { t0: performance.now(), dur: dur, w: world, k: Math.floor(Math.random() * world.planets.length) }; return; }
+    if (mode !== 'main') return;
     const hubs = G.nodes.filter((n) => G.adj[n.i].size >= 6), hub = (hubs.length ? hubs[Math.floor(Math.random() * hubs.length)] : G.nodes[Math.floor(Math.random() * N)]).i, ids = [hub];
     G.adj[hub].forEach((j) => { if (ids.length < 14) ids.push(j); });
     OV = { t0: performance.now(), dur: dur, hub: hub, ids: ids };
@@ -653,7 +656,7 @@ function createEngine(cv, opt, cb) {
       else { ctx.fillStyle = n.color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#FFFFFF'; ctx.globalAlpha = a * 0.7; ctx.beginPath(); ctx.arc(x, y, r * 0.4, 0, Math.PI * 2); ctx.fill(); }
       if (i === hov && focus < 0) { const f = (now / 1400) % 1; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.1; ctx.globalAlpha = fN * 0.9; ctx.beginPath(); ctx.arc(x, y, r * 2.6 + 4, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = fN * (1 - f) * 0.5; ctx.beginPath(); ctx.arc(x, y, r * (2.6 + f * 5) + 4, 0, Math.PI * 2); ctx.stroke(); }
     }
-    if (OV) drawOverload(now, fN);
+    if (OV && !OV.w) drawOverload(now, fN);
     ctx.globalCompositeOperation = 'source-over';
     // project world labels (script)
     if (lblK > 0.01) {
@@ -963,6 +966,36 @@ function createEngine(cv, opt, cb) {
     }
     ctx.globalCompositeOperation = 'source-over';
   }
+  // 월드 과부하: 배경 글리치와 같은 박자
+  function drawWorldOverload(now, C) {
+    const u = (now - OV.t0) / OV.dur; if (u >= 1) { OV = null; return; }
+    if (pz || dp) return;
+    const k = Math.sqrt(Math.sin(Math.PI * u)) * (Math.random() < 0.7 ? 1 : 0.1); if (k < 0.02) return;
+    const p = world.planets[OV.k]; if (!p || p.pa <= 0.01) return;
+    const RED = '#FF3A44', jit = () => (Math.random() - 0.5) * 8;
+    ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = RED; ctx.fillStyle = RED; ctx.lineWidth = 1;
+    // 행성: 붉은 번짐 + 링이 붉게 떨린다
+    const gz = p.sr * 4.5; ctx.globalAlpha = k * 0.9; ctx.drawImage(sprite('#FF3038'), p.sx - gz / 2, p.sy - gz / 2, gz, gz);
+    const rs = p.sr * 0.48, ya = now * 0.00022 + p.spin, cy = Math.cos(ya), sy = Math.sin(ya), jx = jit();
+    ctx.globalAlpha = k * 0.9; ctx.beginPath();
+    p.rings.forEach((R) => { for (let q = 0; q <= 40; q++) { orbPt(R, q / 40 * TAU, rs, cy, sy, pq); if (q) ctx.lineTo(p.sx + jx + pq[0], p.sy + pq[1]); else ctx.moveTo(p.sx + jx + pq[0], p.sy + pq[1]); } });
+    ctx.stroke();
+    // 합선: 행성 → 코어 가장자리로 지그재그
+    const dx = C[0] - p.sx, dy = C[1] - p.sy, L = Math.hypot(dx, dy) || 1, ex = C[0] - dx / L * C[2] * 1.12, ey = C[1] - dy / L * C[2] * 1.12, nx = -dy / L, ny = dx / L;
+    ctx.globalAlpha = k * 0.75; ctx.beginPath(); ctx.moveTo(p.sx, p.sy);
+    for (let s = 1; s < 7; s++) { const f = s / 7, j = (Math.random() - 0.5) * 16; ctx.lineTo(p.sx + (ex - p.sx) * f + nx * j, p.sy + (ey - p.sy) * f + ny * j); }
+    ctx.lineTo(ex, ey); ctx.stroke();
+    // 코어: 적도 띠 가닥 몇 줄이 붉게 튀고 어긋난다
+    for (let s = 0; s < 3; s++) {
+      const B = BAND[Math.floor(Math.random() * BAND.length)], ox = jit() * 1.5; ctx.globalAlpha = k * 0.8; ctx.beginPath();
+      for (let q = 0, on = false; q <= 96; q++) { bandPt(q / 96 * TAU, B.r, 0, B.rT, C, tmp); if (tmp[2] > 0) { if (on) ctx.lineTo(tmp[0] + ox, tmp[1]); else ctx.moveTo(tmp[0] + ox, tmp[1]); on = true; } else on = false; }
+      ctx.stroke();
+    }
+    const cz = C[2] * 0.7; ctx.globalAlpha = k * 0.5; ctx.drawImage(sprite('#FF3038'), C[0] - cz / 2, C[1] - cz / 2, cz, cz);
+    // 찢어지는 주사선: 행성 · 코어 높이
+    [[p.sx, p.sy], [C[0], C[1]]].forEach((c) => { for (let s = 0; s < 2; s++) { const w = 30 + Math.random() * 140; ctx.globalAlpha = k * (0.3 + 0.4 * Math.random()); ctx.fillRect(c[0] - w / 2 + jit() * 4, c[1] + (Math.random() - 0.5) * 50, w, 1); } });
+    ctx.globalCompositeOperation = 'source-over';
+  }
   function drawWorld(now, dt, aW, gW) {
     if (!world || aW <= 0.002) return;
     const C = wCenter(), mob = W < 760, el = now - wT0;
@@ -1051,6 +1084,7 @@ function createEngine(cv, opt, cb) {
       ctx.globalAlpha = 1; ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(hx, hy, 2.2, 0, TAU); ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
     }
+    if (OV && OV.w === world) drawWorldOverload(now, C);
     if (pS !== 1) ctx.restore();
     ctx.globalAlpha = 1;
   }
