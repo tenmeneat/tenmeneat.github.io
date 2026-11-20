@@ -43,8 +43,51 @@
   const fmtPeriod = (s) => (s || '').replace(/(\d{4})-(\d{2})-\d{2}/g, '$1.$2').replace(/\s*~\s*/, ' — ');
   const metaLine = (a) => '<p class="wmeta">' + a.filter(Boolean).map(esc).join('<i aria-hidden="true">·</i>') + '</p>';
   const wlink = (j, t) => '<a class="wlink rd-open" href="#/note/' + encodeURIComponent(G.nodes[j].name) + '">' + t + ' <span aria-hidden="true">→</span></a>';
-  const idx = (rows, color) => '<ol class="widx" style="--c:' + color + '">' + rows.map((r) => '<li><button type="button" class="wrow' + (r.on ? ' on' : '') + '" ' + r.attr + '><span class="no">' + r.no + '</span><span class="nm">' + esc(r.nm) + '</span><span class="ct">' + r.ct + '</span></button></li>').join('') + '</ol>';
-  const noteIdx = (ids, color) => idx(ids.map((j, k) => ({ attr: 'data-note="' + j + '"', no: String(k + 1).padStart(2, '0'), nm: noteName(j), ct: G.adj[j].size, on: state.note === j })), color);
+  // 인덱스 = 데이터 팬: 왼쪽 개념 점(src)에서 곡선이 각 줄의 축 점으로 모이고, 줄 끝엔 노트별 링크 수 바코드
+  function idx(rows, color, src) {
+    src = src || [];
+    const w = rows.map((r) => src.map((c) => r.ids.reduce((a, j) => a + (G.adj[j].has(c) ? 1 : 0), 0)));
+    const mx = Math.max(1, ...rows.flatMap((r) => r.ids.map((j) => G.adj[j].size)));
+    const fan = src.length ? '<svg class="wfan" aria-hidden="true" data-fan="' + esc(JSON.stringify({ c: src, s: src.map((c) => G.nodes[c].name), w: w })) + '"></svg>' : '';
+    return '<ol class="widx' + (fan ? ' fan' : '') + '" style="--c:' + color + '">' + fan + rows.map((r) => {
+      const bc = '<span class="bc" aria-hidden="true">' + (r.ids.length > 1 ? r.ids.slice(0, 12).map((j) => '<i style="height:' + (3 + Math.round(9 * G.adj[j].size / mx)) + 'px"></i>').join('') : '') + '</span>';
+      return '<li><button type="button" class="wrow' + (r.on ? ' on' : '') + '" ' + r.attr + '><span class="no">' + r.no + '</span><span class="nm">' + esc(r.nm) + '</span>' + bc + '<span class="ct">' + r.ct + '</span></button></li>';
+    }).join('') + '</ol>';
+  }
+  const noteIdx = (ids, color, src) => idx(ids.map((j, k) => ({ attr: 'data-note="' + j + '"', ids: [j], no: String(k + 1).padStart(2, '0'), nm: noteName(j), ct: G.adj[j].size, on: state.note === j })), color, src);
+  function drawFan(panel) {   // 줄 위치가 정해진 뒤에 곡선을 그린다
+    const sv = panel.querySelector('.wfan'); if (!sv) return;
+    const D = JSON.parse(sv.getAttribute('data-fan')), ol = sv.parentNode, rows = Array.from(ol.querySelectorAll('.wrow')), H = ol.clientHeight;
+    if (!rows.length || !H) return;
+    const X0 = 6, X1 = 52, n = D.s.length, ry = rows.map((r) => r.offsetTop + r.offsetHeight / 2), f = (v) => v.toFixed(1);
+    const top = ry[0], bot = ry[ry.length - 1], sy = D.s.map((_, q) => top + (bot - top) * (n > 1 ? 0.1 + 0.8 * q / (n - 1) : 0.5));
+    let h = '<defs><linearGradient id="fang" gradientUnits="userSpaceOnUse" x1="' + X0 + '" x2="' + X1 + '" y1="0" y2="0"><stop offset="0" stop-color="#D4AF6A"></stop><stop offset="1" stop-color="' + ol.style.getPropertyValue('--c') + '"></stop></linearGradient></defs>';
+    h += '<line class="sp" x1="' + X1 + '" y1="' + f(top - 6) + '" x2="' + X1 + '" y2="' + f(bot + 6) + '"></line>';
+    let d = 0;
+    ry.forEach((y, k) => D.s.forEach((s, q) => { const v = D.w[k][q]; if (!v) return;
+      h += '<path data-r="' + k + '" data-q="' + q + '" pathLength="1" style="--d:' + (d++) + '" stroke="url(#fang)" stroke-width="' + Math.min(2, 0.5 + v * 0.3).toFixed(2) + '" d="M' + X0 + ' ' + f(sy[q]) + 'C' + (X0 + 26) + ' ' + f(sy[q]) + ' ' + (X1 - 22) + ' ' + f(y) + ' ' + X1 + ' ' + f(y) + '"></path>'; }));
+    ry.forEach((y, k) => { h += '<line class="tk" data-r="' + k + '" x1="' + (X1 + 4) + '" y1="' + f(y) + '" x2="64" y2="' + f(y) + '"></line><circle class="rd" data-r="' + k + '" cx="' + X1 + '" cy="' + f(y) + '" r="2.4"></circle>'; });
+    D.s.forEach((s, q) => { h += '<circle class="sd" data-q="' + q + '" cx="' + X0 + '" cy="' + f(sy[q]) + '" r="2.2"><title>' + esc(s) + '</title></circle>'; });
+    sv.setAttribute('viewBox', '0 0 64 ' + H); sv.style.height = H + 'px'; sv.innerHTML = h; sv._D = D; lastMark = '';
+  }
+  // 강조: 줄(k) 또는 개념(q) 하나를 기준으로 곡선·축 점·줄·하단 태그를 함께 켠다. 같은 상태면 아무것도 안 한다(깜빡임 방지)
+  let lastMark = '';
+  function mark(k, q) {
+    const key = k + ':' + q; if (key === lastMark) return; lastMark = key;
+    const panel = $('wpanel'), sv = panel.querySelector('.wfan'), D = sv && sv._D, any = k >= 0 || q >= 0;
+    const rowOn = (i) => k >= 0 ? i === k : q >= 0 && !!D && D.w[i][q] > 0;
+    const qOn = (j) => q >= 0 ? j === q : k >= 0 && !!D && D.w[k][j] > 0;
+    panel.querySelectorAll('.wrow').forEach((x, i) => { x.classList.toggle('hl', any && rowOn(i)); });
+    if (sv) {
+      sv.classList.toggle('act', any);
+      sv.querySelectorAll('[data-r], [data-q]').forEach((e) => {
+        const r = e.getAttribute('data-r'), c = e.getAttribute('data-q');
+        e.classList.toggle('on', any && (r === null || rowOn(Number(r))) && (c === null || qOn(Number(c))));
+      });
+    }
+    panel.querySelectorAll('.wtags [data-go]').forEach((b) => { const j = D ? D.c.indexOf(Number(b.getAttribute('data-go'))) : -1; b.classList.toggle('on', any && j >= 0 && qOn(j)); });
+  }
+  const rowIndex = (r) => Array.from($('wpanel').querySelectorAll('.wrow')).indexOf(r);
   const tagLine = (label, ms) => ms.length ? '<p class="wtags"><span class="tl">' + label + '</span>' + ms.map((m) => '<button type="button" data-go="' + m.i + '">' + esc(m.name) + '</button>').join('') + '</p>' : '';
   function worldHtml() {
     const i = state.world; if (i < 0) return { html: '', hint: '' };
@@ -60,11 +103,12 @@
       const summary = own ? own.name + ' — ' + (own.summary || '') : moc.summary;
       const dot = '<span class="dot" aria-hidden="true" style="background:' + p.color + ';box-shadow:0 0 12px ' + p.color + '"></span>';
       const sec = state.section && p.sections.find((s) => s.key === state.section);
+      const src = concepts.slice(0, 6).map((m) => m.i);   // 팬의 소스 = 하단 Concepts 태그와 같은 6개
       if (sec) {   // 섹션 행성 안: 그 섹션의 노트들이 행성이다
         let s = '<p class="wk" style="color:' + p.color + '">' + dot + 'Section ' + esc(sec.no) + '</p>';
         s += '<p class="wscript">' + esc(p.label) + '</p><h2 class="wtitle">' + esc(sec.name) + '</h2>';
         s += metaLine([moc.title || moc.name, '노트 ' + sec.ids.length]);
-        s += noteIdx(sec.ids, p.color);
+        s += noteIdx(sec.ids, p.color, src);
         return { html: s, hint: 'Click a planet to read its note', label: p.label + ' · ' + sec.name, back: p.label };
       }
       let h = '<p class="wk" style="color:' + p.color + '">' + dot + 'Project world</p>';
@@ -73,8 +117,8 @@
       if (summary) h += '<p class="wsum">' + esc(summary) + '</p>';
       h += wlink(own ? own.i : p.moc, own ? '노트 읽기' : '개요 읽기');
       const multi = p.sections.length > 1;
-      h += multi ? idx(p.sections.map((s) => ({ attr: 'data-sec="' + esc(s.key) + '"', no: s.no, nm: s.name, ct: s.ids.length })), p.color)
-        : noteIdx(p.sections[0].ids.filter((j) => j !== p.moc), p.color);
+      h += multi ? idx(p.sections.map((s) => ({ attr: 'data-sec="' + esc(s.key) + '"', ids: s.ids, no: s.no, nm: s.name, ct: s.ids.length })), p.color, src)
+        : noteIdx(p.sections[0].ids.filter((j) => j !== p.moc), p.color, src);
       h += '<div class="wfoot">' + tagLine('Concepts', concepts.slice(0, 6)) + tagLine('Tools', tools.slice(0, 6)) + '</div>';
       return { html: h, hint: multi ? 'Click a planet to zoom in' : 'Click a planet to read its note', label: p.label };
     }
@@ -114,6 +158,7 @@
       const r = worldHtml();
       const panel = $('wpanel'), key = state.world + ':' + state.section, keep = panel.scrollTop, same = panel.getAttribute('data-w') === key;
       panel.innerHTML = r.html; panel.setAttribute('aria-label', r.label || ''); panel.setAttribute('data-w', key);
+      drawFan(panel); if (document.fonts) document.fonts.ready.then(() => drawFan(panel));   // 폰트가 늦게 오면 줄 높이가 바뀌므로 한 번 더
       if (same) panel.scrollTop = keep; else { panel.scrollTop = 0; panel.classList.remove('pin'); void panel.offsetWidth; panel.classList.add('pin'); }   // 섹션 안팎을 오갈 때 패널이 부드럽게 바뀐다
       panel.classList.remove('pout');
       const on = panel.querySelector('.wrow.on'); if (on) on.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
@@ -147,11 +192,20 @@
   });
   // 패널 목록 ↔ 행성 하이라이트 (양방향)
   const rowKey = (el) => el.hasAttribute('data-sec') ? el.getAttribute('data-sec') : Number(el.getAttribute('data-note'));
-  $('wpanel').addEventListener('mouseover', (e) => { const r = e.target.closest('.wrow'); if (eng) eng.hl(r ? rowKey(r) : null); });
-  $('wpanel').addEventListener('mouseleave', () => { if (eng) eng.hl(null); });
+  // 줄 사이 틈·팬 영역(목록 안)에서는 상태를 유지한다 — 줄을 옮겨 갈 때 '꺼짐→켜짐'이 반복되던 깜빡임의 원인
+  let hlKey = null;
+  const engHl = (v) => { if (v !== hlKey) { hlKey = v; if (eng) eng.hl(v); } };
+  $('wpanel').addEventListener('mouseover', (e) => {
+    const r = e.target.closest('.wrow'), t = e.target.closest('.wtags [data-go]'), sv = $('wpanel').querySelector('.wfan');
+    if (r) { engHl(rowKey(r)); mark(rowIndex(r), -1); }
+    else if (t && sv && sv._D && sv._D.c.includes(Number(t.getAttribute('data-go')))) { engHl(null); mark(-1, sv._D.c.indexOf(Number(t.getAttribute('data-go')))); }   // 개념 태그 → 그 개념이 닿는 섹션들
+    else if (e.target.closest('.wk, .wscript, .wtitle, .wmeta, .wsum, .wlink, .wtags [data-go]')) { engHl(null); mark(-1, -1); }   // 위쪽 제목부·도구 태그에 닿을 때만 끈다. 목록↔Concepts 사이 빈 공간·태그 사이 틈에서는 유지
+  });
+  $('wpanel').addEventListener('mouseleave', () => { engHl(null); mark(-1, -1); });
   function onWHover(act) {
     const v = act ? (act.sec !== undefined ? act.sec : act.note) : null;
-    $('wpanel').querySelectorAll('.wrow').forEach((r) => r.classList.toggle('hl', v !== null && rowKey(r) === v));
+    const r = v === null ? null : Array.from($('wpanel').querySelectorAll('.wrow')).find((x) => rowKey(x) === v);
+    mark(r ? rowIndex(r) : -1, -1);
   }
   $('btn-back').addEventListener('click', () => { if (eng) eng.back(); });
   $('btn-skip').addEventListener('click', () => { if (eng) eng.skip(); });
