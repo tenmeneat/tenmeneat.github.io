@@ -14,13 +14,15 @@ const GROUP_KIND = { home: 'home', concepts: 'concept', tools: 'tool', courses: 
 const P_EN = { f1t: 'F1TENTH', hy: 'HY-step', gft: 'GreenFlow-T', cae: 'CAE', 'proj:2026_Techno': 'Techno' };
 const P_CODE = { f1t: 'F1T', hy: '세정기', gft: 'GFT', cae: 'CAE', 'proj:2026_Techno': 'TEC' };
 const G_EN = { home: 'Home', concepts: 'Concepts', tools: 'Tools', courses: 'Courses' };
+// 제목 글꼴 (CSS --script). k = 크기 보정값 (필기체는 글자가 작아 크게, Alegreya는 보통 크기), it = 이탤릭
 const SCRIPTS = {
+  alegreya: { css: "'Alegreya', serif", k: 0.62, it: true },
   allura: { css: "'Allura', cursive", k: 1 },
   sacramento: { css: "'Sacramento', cursive", k: 1.04 },
   parisienne: { css: "'Parisienne', cursive", k: 0.8 },
   italianno: { css: "'Italianno', cursive", k: 1.16 }
 };
-function scriptOf(k) { return SCRIPTS[k] || SCRIPTS.allura; }
+function scriptOf(k) { return SCRIPTS[k] || SCRIPTS.alegreya; }
 function rgbOf(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function mkRng(seed) { let s = seed >>> 0; return function () { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -498,7 +500,7 @@ function createEngine(cv, opt, cb) {
     pj(m0 * f, m1 * f, m2 * f, tmp2); ECX[q] = tmp2[0]; ECY[q] = tmp2[1];
   }
   function qpt(x0, y0, c0, c1, x1, y1, t, out) { const u = 1 - t; out[0] = u * u * x0 + 2 * u * t * c0 + t * t * x1; out[1] = u * u * y0 + 2 * u * t * c1 + t * t * y1; return out; }
-  function sFont(px) { return '400 ' + Math.round(px * opt.fonts.k) + 'px ' + opt.fonts.script; }
+  function sFont(px) { return (opt.fonts.it ? 'italic ' : '') + '400 ' + Math.round(px * opt.fonts.k) + 'px ' + opt.fonts.script; }
   function drawRings(now, fade) {
     const rings = [[1.42, 0.38, 0.00009], [1.6, -1.0, -0.00006]];
     ctx.setLineDash([1.2, 7]); ctx.lineWidth = 1;

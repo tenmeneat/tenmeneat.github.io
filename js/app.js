@@ -4,7 +4,7 @@
 (function () {
   const Q = new URLSearchParams(location.search);
   const CONFIG = {
-    scriptFont: Q.get('font') || 'allura',             // allura | sacramento | parisienne | italianno
+    scriptFont: Q.get('font') || 'alegreya',           // 제목 글꼴: alegreya | allura | sacramento | parisienne | italianno
     accent: '#' + (Q.get('accent') || 'BFD3FF'),
     introFont: Q.get('introFont') || 'mrs-saint-delafield', // mrs-saint-delafield | great-vibes | pinyon-script
     introInk: '#D4AF6A',
@@ -20,6 +20,7 @@
   const S = scriptOf(CONFIG.scriptFont);
   document.documentElement.style.setProperty('--script', S.css);
   document.documentElement.style.setProperty('--k', String(S.k));
+  document.documentElement.style.setProperty('--script-style', S.it ? 'italic' : 'normal');
   document.documentElement.style.setProperty('--accent', CONFIG.accent);
 
   const state = { phase: 'intro', world: -1, section: null, note: null };   // section: 들어가 있는 섹션 행성의 key, note: 선택한 노트
@@ -154,7 +155,7 @@
     window.BG = createBackdrop($('bg-canvas'));
     eng = createEngine($('brain-canvas'), {
       intro: intro, autoRotate: CONFIG.autoRotate && !reduce, orbit: CONFIG.orbitMotion && !reduce,
-      fonts: { script: S.css, k: S.k, body: "'Noto Sans KR', sans-serif", mono: "'Noto Sans KR', sans-serif" },
+      fonts: { script: S.css, k: S.k, it: S.it, body: "'Noto Sans KR', sans-serif", mono: "'Noto Sans KR', sans-serif" },
       introFont: CONFIG.introFont, ink: CONFIG.introInk, inkScale: CONFIG.introThickness
     }, {
       onBurst: () => { lightUp(); if (window.BG) window.BG.setMode('main'); },   // 파티클이 흩어지는 순간부터 배경 유체도 그래프 쪽으로 흐르기 시작
@@ -172,7 +173,7 @@
     set({ phase: intro ? 'intro' : 'main' });
   };
   // 캔버스에 필기체 라벨을 그리기 전에 폰트를 받아 둔다 (최대 1.5초 대기)
-  const fontReady = document.fonts && document.fonts.load ? Promise.race([Promise.all([document.fonts.load('30px ' + S.css), document.fonts.load('13px "Noto Sans KR"')]), new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve();
+  const fontReady = document.fonts && document.fonts.load ? Promise.race([Promise.all([document.fonts.load((S.it ? 'italic ' : '') + '30px ' + S.css), document.fonts.load('13px "Noto Sans KR"')]), new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve();
   fontReady.then(start, start);
   render();
   document.documentElement.classList.remove('boot');   // render()가 is-hidden을 이미 걸었으므로 불투명도 변화 없이 인계된다
