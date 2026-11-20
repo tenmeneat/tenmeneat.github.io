@@ -508,6 +508,35 @@ function createEngine(cv, opt, cb) {
   // 포커스/호버 강조(나머지 흐림·라벨 숨김)는 on/off 로 튀지 않도록 0~1 값으로 서서히 바꾼다.
   // 월드에서 돌아오는 'rise' 동안에는 시간에 맞춰 풀어서 마지막 프레임에 한꺼번에 밝아지는 끊김이 없게 한다.
   let actK = 0, actI = -1, lblK = 1;
+  // ---------- 과부하: 배경 마법진 글리치와 같은 순간, 한 지식 영역(허브 + 이웃)이 붉게 튀고 허브로 합선된다 ----------
+  let OV = null;
+  function overload(dur) {
+    if (mode !== 'main' || opt.reduce) return;
+    const hubs = G.nodes.filter((n) => G.adj[n.i].size >= 6), hub = (hubs.length ? hubs[Math.floor(Math.random() * hubs.length)] : G.nodes[Math.floor(Math.random() * N)]).i, ids = [hub];
+    G.adj[hub].forEach((j) => { if (ids.length < 14) ids.push(j); });
+    OV = { t0: performance.now(), dur: dur, hub: hub, ids: ids };
+  }
+  function drawOverload(now, fN) {   // 가산 합성 상태에서 호출된다
+    const u = (now - OV.t0) / OV.dur; if (u >= 1) { OV = null; return; }
+    const k = Math.sqrt(Math.sin(Math.PI * u)) * (Math.random() < 0.7 ? 1 : 0.1) * fN; if (k < 0.02) return;   // 배경과 같은 스타카토
+    const hk = D + OV.hub; if (ss[hk] <= 0) return;
+    const hx = sx[hk], hy = sy[hk];
+    ctx.strokeStyle = '#FF3A44'; ctx.lineWidth = 1;
+    OV.ids.forEach((i, q) => {
+      const kk = D + i; if (ss[kk] <= 0) return;
+      const x = sx[kk] + (Math.random() - 0.5) * 6, y = sy[kk], r = nodeR(i), gs = Math.min(r * (q ? 8 : 14), 280);
+      ctx.globalAlpha = k * 0.95; ctx.drawImage(sprite('#FF3038'), x - gs / 2, y - gs / 2, gs, gs);
+      ctx.fillStyle = '#FF6A6F'; ctx.globalAlpha = k; ctx.beginPath(); ctx.arc(x, y, r * 1.15, 0, Math.PI * 2); ctx.fill();
+      if (q && Math.random() < 0.65) {   // 합선: 허브 → 노드로 지그재그 붉은 선
+        const dx = x - hx, dy = y - hy, L = Math.hypot(dx, dy) || 1, px = -dy / L, py = dx / L;
+        ctx.globalAlpha = k * 0.7; ctx.beginPath(); ctx.moveTo(hx, hy);
+        for (let s = 1; s < 5; s++) { const f = s / 5, j = (Math.random() - 0.5) * Math.min(18, L * 0.15); ctx.lineTo(hx + dx * f + px * j, hy + dy * f + py * j); }
+        ctx.lineTo(x, y); ctx.stroke();
+      }
+    });
+    ctx.fillStyle = '#FF3A44';   // 허브 높이의 찢어지는 주사선
+    for (let s = 0; s < 3; s++) { const w = 40 + Math.random() * 160, y = hy + (Math.random() - 0.5) * 60; ctx.globalAlpha = k * (0.3 + 0.4 * Math.random()); ctx.fillRect(hx - w / 2 + (Math.random() - 0.5) * 40, y, w, 1); }
+  }
   function drawBrain(now, dt, fB, fixN) {
     const focus = dv ? dv.i : -1, hov = st.hover, actNow = focus >= 0 ? focus : hov, rt = mode === 'rise' && dv ? now - dv.t0 : -1;
     if (actNow >= 0) actI = actNow;
@@ -624,6 +653,7 @@ function createEngine(cv, opt, cb) {
       else { ctx.fillStyle = n.color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#FFFFFF'; ctx.globalAlpha = a * 0.7; ctx.beginPath(); ctx.arc(x, y, r * 0.4, 0, Math.PI * 2); ctx.fill(); }
       if (i === hov && focus < 0) { const f = (now / 1400) % 1; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.1; ctx.globalAlpha = fN * 0.9; ctx.beginPath(); ctx.arc(x, y, r * 2.6 + 4, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = fN * (1 - f) * 0.5; ctx.beginPath(); ctx.arc(x, y, r * (2.6 + f * 5) + 4, 0, Math.PI * 2); ctx.stroke(); }
     }
+    if (OV) drawOverload(now, fN);
     ctx.globalCompositeOperation = 'source-over';
     // project world labels (script)
     if (lblK > 0.01) {
@@ -1134,7 +1164,7 @@ function createEngine(cv, opt, cb) {
   return {
     dive: dive, travel: travel, back: back,
     mode: function () { return mode; },
-    enterSection: enterSection, pick: pick, drop: drop, undrop: undrop,
+    enterSection: enterSection, pick: pick, drop: drop, undrop: undrop, overload: overload,
     skip: function () { if (mode === 'intro') { const n = performance.now(); mode = 'main'; mainT0 = n; dustT0 = n; cb.onMain(); } },
     setOpts: function (o) { Object.assign(opt, o); inkBuild(); },
     destroy: function () { cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); cv.removeEventListener('pointerdown', onDown); cv.removeEventListener('pointermove', onMove); cv.removeEventListener('pointerup', onUp); cv.removeEventListener('pointercancel', onUp); cv.removeEventListener('pointerleave', onLeave); }

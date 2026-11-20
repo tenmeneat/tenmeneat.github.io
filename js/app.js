@@ -156,7 +156,7 @@
   // ---------- boot ----------
   const intro = CONFIG.showIntro && !reduce;
   const start = () => {
-    window.BG = createBackdrop($('bg-canvas'));
+    window.BG = createBackdrop($('bg-canvas'), { onGlitch: (d) => { if (eng) eng.overload(d); } });   // 배경 글리치 ↔ 브레인 노드 과부하 연동
     eng = createEngine($('brain-canvas'), {
       intro: intro, autoRotate: CONFIG.autoRotate && !reduce, orbit: CONFIG.orbitMotion && !reduce, reduce: reduce,
       fonts: { script: S.css, k: S.k, it: S.it, body: "'Noto Sans KR', sans-serif", mono: "'Noto Sans KR', sans-serif" },

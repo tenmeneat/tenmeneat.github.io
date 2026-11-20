@@ -345,6 +345,57 @@ function createBackdrop(cv, opt) {
     });
   }
 
+  // ---------- 과부하 글리치 (지식의 과부하) ----------
+  // 5~14초마다 한 번, 0.5~1.2초 동안 대마법진의 겹 1~2개가 붉게 번쩍이며 가로 띠로 어긋나고 붉은 노이즈가 낀다.
+  // 사이트에서 유일한 붉은색이라 드물고 짧아야 "사건"으로 읽힌다. 겹 스프라이트를 이벤트마다 붉게 칠한 사본으로 쓴다.
+  const RED = [255, 48, 56], glR = rng(4242), GL = { next: 0, t0: -1, dur: 0, now: 0, layers: [] };
+  function redOf(L) {
+    const c = document.createElement('canvas'); c.width = L.c.width; c.height = L.c.height;
+    const g = c.getContext('2d'); g.drawImage(L.c, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = rgba(RED, 1); g.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+  function glitchStep(now) {
+    GL.now = now;
+    if (reduce || mode === 'intro' || !HERO) { GL.t0 = -1; GL.layers = []; GL.next = 0; return; }
+    if (!GL.next) { GL.next = now + 3000 + glR() * 4000; return; }
+    if (GL.t0 < 0 && now >= GL.next) {
+      // 중심은 브레인 그래프에 가리므로 바깥 띠(방정식·룬·눈금) 위주로 고른다
+      const nL = HERO.layers.length, a0 = Math.floor(glR() * Math.min(3, nL)), idx = [a0];
+      if (glR() < 0.45) idx.push((a0 + 1 + Math.floor(glR() * (nL - 1))) % nL);
+      GL.layers = idx.map((i) => ({ L: HERO.layers[i], red: redOf(HERO.layers[i]) })); GL.t0 = now; GL.dur = 500 + glR() * 700;
+      if (opt.onGlitch) opt.onGlitch(GL.dur);   // 브레인 그래프도 같은 순간 과부하 (app.js가 엔진에 잇는다)
+    }
+    if (GL.t0 >= 0 && now - GL.t0 > GL.dur) { GL.t0 = -1; GL.layers = []; GL.next = now + 5000 + glR() * 9000; }
+  }
+  function drawGlitch(cx, cy, sc, a) {
+    if (GL.t0 < 0) return;
+    const u = (GL.now - GL.t0) / GL.dur, k = a * Math.sqrt(Math.sin(Math.PI * Math.min(1, u))) * (Math.random() < 0.7 ? 1 : 0.12);   // 스타카토로 깜빡인다
+    if (k <= 0.01) return;
+    const Rs = HERO.R * sc;
+    GL.layers.forEach((o) => {
+      const ang = o.L.ph + o.L.w * t, w = o.red.width / S, h = o.red.height / S;
+      const put = (dx, al) => { ctx.save(); ctx.translate(cx + dx, cy); ctx.rotate(ang); if (sc !== 1) ctx.scale(sc, sc); ctx.globalAlpha = Math.min(1, al); ctx.drawImage(o.red, -w / 2, -h / 2, w, h); ctx.restore(); };
+      ctx.globalCompositeOperation = 'lighter'; put((Math.random() - 0.5) * 10, k * 1.1);   // 붉은 잔상(살짝 어긋남)
+      ctx.globalCompositeOperation = 'source-over';
+      for (let i = 0, n = 4 + Math.floor(Math.random() * 5); i < n; i++) {   // 가로 띠가 잘려 옆으로 밀린다 (원래 선은 지우고 붉은 선만)
+        const by = cy + (Math.random() * 2 - 1) * Rs * 0.95, bh = 2 + Math.random() * 22;
+        ctx.save(); ctx.beginPath(); ctx.rect(0, by, W, bh); ctx.clip();
+        ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = k * 0.85; ctx.fillRect(cx - Rs, by, Rs * 2, bh); ctx.globalCompositeOperation = 'source-over';
+        put((Math.random() * 2 - 1) * Rs * 0.08, k * 1.6); ctx.restore();
+      }
+    });
+    ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = rgba(RED, 1);
+    for (let i = 0, n = 2 + Math.floor(Math.random() * 3); i < n; i++) {   // 찢어지는 주사선
+      const y = cy + (Math.random() * 2 - 1) * Rs * 0.9, hw = Rs * (0.3 + Math.random() * 0.7), x = cx + (Math.random() * 2 - 1) * Rs * 0.3;
+      ctx.globalAlpha = k * (0.35 + 0.4 * Math.random()); ctx.fillRect(x - hw, y, hw * 2, 1);
+    }
+    for (let i = 0; i < 90; i++) {   // 붉은 노이즈: 짧은 가로 대시
+      const x = cx + (Math.random() * 2 - 1) * Rs, y = cy + (Math.random() * 2 - 1) * Rs; if (Math.hypot(x - cx, y - cy) > Rs) continue;
+      ctx.globalAlpha = k * (0.3 + 0.6 * Math.random()); ctx.fillRect(x, y, 1 + Math.random() * 18, 1 + Math.random() * 1.4);
+    }
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  }
+
   // 열추진: 터보팬 전면 — 비틀린 블레이드 원판
   function drawFan(col, a) {
     const x = W * 1.0 - U * 0.04, y = H + U * 0.06, R0 = U * 0.34, N = 22, hub = R0 * 0.3;
@@ -377,7 +428,7 @@ function createBackdrop(cv, opt) {
     const L = opt.layers, col = lerpC(WARM, SILVER, mix), gA = lerp(0.95, 0.7, mix) * dim, dA = lerp(1.0, 1.5, mix) * dim;
     if (L.stars) drawStars(col, 0.9 * dim);
     ctx.save(); ctx.translate(0, OY);   // 시계 문양 레이어는 스크롤의 PAR배로 올라간다 (별은 고정)
-    if (L.dial) { if (HERO) drawSeal(HERO, C.x, C.y, C.r * 2.95 / HERO.R, dA * 0.8); drawSpine(col, dA * 0.42); }   // 본문(About) 글자 뒤라서 첫 화면보다 살짝 약하게
+    if (L.dial) { if (HERO) { drawSeal(HERO, C.x, C.y, C.r * 2.95 / HERO.R, dA * 0.8); drawGlitch(C.x, C.y, C.r * 2.95 / HERO.R, dA * 0.8); } drawSpine(col, dA * 0.42); }   // 본문(About) 글자 뒤라서 첫 화면보다 살짝 약하게
     if (L.fan) drawFan(lerpC(GOLD_L, SILVER, mix * 0.6), lerp(1.1, 1.0, mix) * dim);
     if (L.gears) drawGears(gA);
     ctx.restore();
@@ -409,6 +460,7 @@ function createBackdrop(cv, opt) {
     const kb = C.r * 1.12, q = Math.min(1, Math.max(0, (C.y - sy + kb) / (1.6 * kb)));
     AO = q * q * (3 - 2 * q);
     dim += ((mode === 'world' ? 0.55 : mode === 'dive' ? 0.4 : 1) - dim) * (1 - Math.exp(-step * 1.5));
+    glitchStep(now);
     draw(step);
   }
   resize();
