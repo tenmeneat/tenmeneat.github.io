@@ -10,6 +10,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Allura&family=Sacramento&family=Parisienne&family=Italianno&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap">
 <link rel="stylesheet" href="css/style.css">
+<script>
+/* 인트로가 돌 때는 첫 페인트부터 메인 UI(헤더·문구·범례)를 숨겨 둔다. 스크립트가 로드되기 전에 메인 화면이 잠깐 비치는 깜빡임 방지 */
+(function () {
+  var d = document.documentElement;
+  if (new URLSearchParams(location.search).get('intro') === '0' || (matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  d.classList.add('boot'); setTimeout(function () { d.classList.remove('boot'); }, 6000);   // 스크립트가 실패해도 화면이 비지 않게 하는 안전장치
+})();
+</script>
 </head>
 <body>
 <div class="page">

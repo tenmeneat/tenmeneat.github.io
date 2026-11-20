@@ -41,6 +41,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #BFD3FF; outline-offs
 .fadeable { transition: opacity 700ms ease, transform 900ms cubic-bezier(.2,.7,.2,1); }
 .fadeable:not(.is-hidden) { transition-delay: .45s; }   /* 나타날 때만 지연: 월드에서 돌아올 때 그래프가 먼저 돌아온 뒤 문구가 떠오른다 */
 .is-hidden { opacity: 0 !important; pointer-events: none !important; }
+html.boot .hdr, html.boot .hero-copy, html.boot .legend, html.boot .cue { opacity: 0 !important; transition: none !important; }   /* 인트로 첫 페인트 전 깜빡임 방지: app.js 첫 render() 뒤에 boot 해제 */
 .hero-copy { position: absolute; left: 56px; bottom: 92px; max-width: 700px; pointer-events: none; z-index: 2; }
 .hero-copy.is-hidden { transform: translateY(16px); }
 .kicker { margin: 0 0 6px; font-size: calc(var(--k) * 28px); line-height: 1.2; color: #9FB4E8; }

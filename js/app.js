@@ -173,4 +173,5 @@
   const fontReady = document.fonts && document.fonts.load ? Promise.race([Promise.all([document.fonts.load('30px ' + S.css), document.fonts.load('13px "Noto Sans KR"')]), new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve();
   fontReady.then(start, start);
   render();
+  document.documentElement.classList.remove('boot');   // render()가 is-hidden을 이미 걸었으므로 불투명도 변화 없이 인계된다
 })();
