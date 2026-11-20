@@ -1,0 +1,5 @@
+# 실명 가리기 목록 (실명이 들어 있음)
+tools/redact.local.json
+# 디자인 캔버스 원본 — 참고용, 배포 안 함
+design/
+node_modules/

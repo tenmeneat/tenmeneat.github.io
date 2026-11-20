@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>N.H.W — Second Brain</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%225%22 fill=%22%23BFD3FF%22/%3E%3C/svg%3E">
+<meta name="description" content="옵시디언 세컨드 브레인을 그대로 옮긴 N.H.W의 포트폴리오">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Allura&family=Sacramento&family=Parisienne&family=Italianno&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page">
+
+<section id="brain" class="brain">
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+  <canvas id="brain-canvas" role="img" aria-label="세컨드 브레인 Shell Graph — 코어·개념·도구와 교과·프로젝트 네 겹의 구형 껍데기에 볼트 노트와 연결을 배치한 3D 그래프"></canvas>
+
+  <header class="hdr" id="hdr">
+    <a href="#brain" class="logo s">N.H.W</a>
+    <nav aria-label="주요 메뉴" class="nav">
+      <div class="nav-links s">
+        <a class="navlink" href="#brain">Brain</a>
+        <a class="navlink" href="#about">About</a>
+        <a class="navlink" href="#projects">Projects</a>
+        <a class="navlink" href="#/index">Index</a>
+        <a class="navlink" href="#contact">Contact</a>
+      </div>
+      <button type="button" class="pill hsearch" data-search aria-label="노트 검색 (Ctrl+K)">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+        <span class="hs-t">Search</span><kbd>Ctrl K</kbd>
+      </button>
+    </nav>
+  </header>
+
+  <div class="hero-copy fadeable" id="hero">
+    <p class="kicker s">Automotive Engineering · Hanyang University</p>
+    <h1 class="hero-h1 s">Engineering, wired<br>as a <span class="accent">second brain.</span></h1>
+    <p class="hero-p">옵시디언 볼트의 노트 <span data-stat="notes"></span>개와 연결 <span data-stat="links"></span>개를 그대로 옮긴 그래프입니다. 노드를 누르면 그 주제의 세계로 들어가, 직접 했던 프로젝트를 보여줍니다.</p>
+    <dl class="stats">
+      <div><dt class="s">Notes</dt><dd data-stat="notes"></dd></div>
+      <div><dt class="s">Links</dt><dd data-stat="links"></dd></div>
+      <div><dt class="s">Projects</dt><dd data-stat="projects"></dd></div>
+      <div><dt class="s">Concepts</dt><dd data-stat="concepts"></dd></div>
+    </dl>
+  </div>
+
+  <div class="legend fadeable" id="legend">
+    <p class="legend-t s">Shells</p>
+    <div id="shell-rows"></div>
+    <p class="legend-t s" style="margin-top: 10px;">Enter a world</p>
+    <div id="proj-rows" class="proj-rows"></div>
+  </div>
+
+  <a class="cue fadeable" id="cue" href="#about">
+    <span class="s cue-t">Scroll to meet me</span>
+    <span aria-hidden="true" class="cue-track"><span class="cue-line"></span></span>
+  </a>
+
+  <div class="world" id="world" hidden>
+    <button type="button" class="pill wback" id="btn-back">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"></path></svg>
+      <span class="s back-t">Back to the brain</span>
+    </button>
+    <aside class="wpanel" id="wpanel" aria-live="polite"></aside>
+    <p class="whint s" id="whint"></p>
+  </div>
+
+  <button type="button" class="pill skip s" id="btn-skip" hidden>Skip intro →</button>
+</section>
+
+<section id="about" class="sec">
+  <p class="kicker s">About me</p>
+  <h2 class="sec-h2 s">Nice to meet you.</h2>
+  <div class="about-grid">
+    <figure class="ph portrait">
+      <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>
+      <figcaption class="s ph-label">Portrait</figcaption>
+      <span class="ph-sub">사진 자리 · 4:5</span>
+    </figure>
+    <div class="about-col">
+      <div class="panel box">
+        <p class="s ph-label">In one line</p>
+        <p class="big">차량 동역학과 제어를 중심으로, 시뮬레이션에서 실차·시제품까지 직접 측정해 검증하는 기계·모빌리티 엔지니어링 학생입니다.</p>
+      </div>
+      <div class="panel box tall">
+        <p class="s ph-label">My story</p>
+        <div class="body">
+          <p>한양대학교 미래자동차공학과 3학년입니다. 차량 동역학, 제어, 기계설계, 유체를 두루 배우면서, 수업에서 배운 이론이 실제 장치 위에서 어디서 어긋나는지 확인하는 일이 가장 재미있었습니다.</p>
+          <p>올해 5월부터 9월까지 IFAC F1TENTH 1/10 스케일 자율주행 레이싱카의 제어 파트를 맡았습니다. 실차에서 odom 속도 부호 반전, IMU 축 오인 같은 숨은 결함을 하나씩 실측으로 잡았고, 조향 룩업 테이블의 구조적 한계를 밝혀 자전거 모델 기반 방식으로 바꿔 논문으로 정리했습니다.</p>
+          <p>같은 시기에 두 개의 설계 대회에 나갔습니다. 발판을 밟는 힘만으로 세정·집진하는 무전원 신발 세정기와 주행풍으로 타이어 분진을 포집하는 GreenFlow-T입니다. 두 번 모두 에너지 예산부터 세우는 법을 배웠고, 제출 뒤에 수치를 다시 검증해 과장된 부분을 스스로 걸러냈습니다.</p>
+          <p>지금은 서킷 주행 하중 기반 액티브 서스펜션 × 로어암 응력 연구(CAE)와, 팀장을 맡은 IoT 곰팡이 예보 프로젝트를 진행 중입니다. 이 사이트도 제가 쓰는 옵시디언 볼트를 그대로 옮긴 것입니다.</p>
+        </div>
+      </div>
+      <div class="cards">
+        <div class="panel card">
+          <p class="s ph-card">Education</p>
+          <ul class="list">
+            <li><b>한양대학교</b> 미래자동차공학과</li>
+            <li>3학년 (2026)</li>
+            <li class="dim">자동제어 · 생산공학 (2026-1)</li>
+          </ul>
+        </div>
+        <div class="panel card">
+          <p class="s ph-card">Interests</p>
+          <ul class="list">
+            <li>차량 동역학 · 타이어 모델</li>
+            <li>자율주행 제어 · 위치추정</li>
+            <li>능동 서스펜션</li>
+            <li>무동력 에너지 하베스팅</li>
+            <li>서킷 주행 데이터 분석</li>
+          </ul>
+        </div>
+        <div class="panel card">
+          <p class="s ph-card">Skills</p>
+          <dl class="skills">
+            <div><dt>Control</dt><dd>PID · LQR · Skyhook · 자전거 모델 · Simulink</dd></div>
+            <div><dt>Software</dt><dd>C++17 · Python · ROS 2 · Next.js · Git</dd></div>
+            <div><dt>Design &amp; CAE</dt><dd>CATIA · ANSYS · COMSOL · CadQuery · Blender</dd></div>
+            <div><dt>Hardware</dt><dd>Jetson · VESC · Arduino · rosbag 분석</dd></div>
+          </dl>
+        </div>
+        <div class="panel card">
+          <p class="s ph-card">Right now</p>
+          <ul class="list" id="now"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="projects" class="sec">
+  <p class="kicker s">Projects</p>
+  <h2 class="sec-h2 s">Things I've built.</h2>
+  <p class="proj-lead">카드는 볼트의 각 프로젝트 <b>00 개요</b> 속성(문제 · 접근 · 결과 · 다시 한다면)에서 자동으로 만들어집니다. 제출 뒤 스스로 수치를 다시 검산한 기록은 <b>검증 기록</b>에서 바로 열 수 있어요.</p>
+  <div class="proj-grid" id="proj-grid"></div>
+</section>
+
+<section id="notes" class="sec">
+  <p class="kicker s">From the brain</p>
+  <h2 class="sec-h2 s">Fresh notes.</h2>
+  <p class="fresh-lead" id="fresh-lead"></p>
+  <div class="fresh" id="fresh"></div>
+  <p class="fresh-more"><a class="pill" href="#/index">전체 노트 보기 →</a><button type="button" class="pill" data-search>검색 <kbd>Ctrl K</kbd></button></p>
+</section>
+
+<section id="timeline" class="sec">
+  <p class="kicker s">Timeline</p>
+  <h2 class="sec-h2 s">How it unfolded.</h2>
+  <ol class="tl-list" id="tl-list"></ol>
+</section>
+
+<section id="awards" class="sec">
+  <p class="kicker s">Papers &amp; Competitions</p>
+  <h2 class="sec-h2 s">Written &amp; entered.</h2>
+  <div class="aw-list">
+    <article class="panel aw">
+      <p class="aw-k">Paper</p>
+      <h3>제22회 한국로봇종합학술대회 (KRoC 2027)</h3>
+      <p>자율주행 레이싱 차량의 조향 룩업 테이블이 갖는 구조적 한계와 자이로 기반 언더스티어 모델로의 대체</p>
+      <p class="dim">논문화 · 재현 자료(CSV 2종)와 오프라인 모델 대조 스크립트 정리</p>
+    </article>
+    <article class="panel aw">
+      <p class="aw-k">Competition</p>
+      <h3>2026 IFAC F1TENTH</h3>
+      <p>1/10 자율주행 레이싱 팀의 제어 파트. 결선 세팅까지 담당</p>
+    </article>
+    <article class="panel aw">
+      <p class="aw-k">Competition</p>
+      <h3>대한기계학회 제16회 전국학생설계경진대회</h3>
+      <p>대학부 공모주제 출품 — 벨로우즈 공압 유도 및 다단 증속기어 기반 무전원 신발 세정·집진 시스템</p>
+    </article>
+    <article class="panel aw">
+      <p class="aw-k">Competition</p>
+      <h3>제1회 튜닝아이디어 경진대회</h3>
+      <p>본선 진출, 발표 10분 + 질의 5분 — GreenFlow-T</p>
+    </article>
+  </div>
+</section>
+
+<footer id="contact" class="sec foot">
+  <div class="foot-row">
+    <div>
+      <p class="kicker s">Let's talk</p>
+      <p class="foot-big s">N.H.W</p>
+      <p class="foot-sub">한양대학교 미래자동차공학과</p>
+    </div>
+    <ul class="foot-links s">
+      <li><a class="navlink bordered" href="#contact">Email</a></li>
+      <li><a class="navlink bordered" href="https://github.com/tenmeneat" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a class="navlink bordered" href="#contact">LinkedIn</a></li>
+    </ul>
+  </div>
+  <p class="copy s">© 2026 N.H.W — built from an Obsidian vault</p>
+</footer>
+
+</div>
+<div class="reader" id="reader" role="dialog" aria-modal="true" hidden></div>
+<script src="js/data.js"></script>
+<script src="js/glyphs.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/backdrop.js"></script>
+<script src="js/app.js"></script>
+<script src="js/reader.js"></script>
+</body>
+</html>

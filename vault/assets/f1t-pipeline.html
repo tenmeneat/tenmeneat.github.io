@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>F1TENTH 파이프라인 맵</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* 탭마다 격자(열 = 파이프라인 단계, 행 = 병렬 가지) 위에 카드, 그 아래층에 입출력 화살표 */
+:root{
+  --bg:#f4f5f8; --panel:#ffffff; --ink:#1b2130; --mute:#586278; --line:#cdd3de;
+  --edge:#6b7487; --hi:#d9480f;
+  --A:#e4edfd; --Ab:#3b6fd4; --B:#e1f3ea; --Bb:#1f8a64;
+  --F:#eceef3; --Fb:#8a93a6; --X:#f0e8fa; --Xb:#8a5bc4;
+  --warn:#8a5200; --warnbg:#fcebc2;
+  --sans:"Noto Sans KR",system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;
+  --mono:"JetBrains Mono","Noto Sans KR","Malgun Gothic",ui-monospace,Consolas,monospace;
+  --nw:214px; --cg:84px; --rg:56px;
+  box-sizing:border-box;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10131a; --panel:#171b24; --ink:#e6e9f0; --mute:#9aa4b8; --line:#2b3342;
+    --edge:#8c96ab; --hi:#ff9a5c;
+    --A:#1a2a4b; --Ab:#6d9bf0; --B:#12332a; --Bb:#4cc79a;
+    --F:#202530; --Fb:#667089; --X:#2a203d; --Xb:#b28ae6;
+    --warn:#f5c15a; --warnbg:#3a2c0c; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;
+  padding-top:max(28px,env(safe-area-inset-top,0px));padding-bottom:max(48px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-size:26px;line-height:1.25;margin:0;font-weight:700;text-wrap:balance}
+h2{font-size:16px;margin:0 0 8px;font-weight:700}
+p{margin:0}
+.sub{color:var(--mute);max-width:80ch;margin-top:6px}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.stat{font-family:var(--mono);font-size:12px;padding:3px 9px;border:1px solid var(--line);border-radius:4px;background:var(--panel)}
+.finds{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.find{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:13px;min-width:0}
+.find b{display:block;margin-bottom:2px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:4px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tab:focus-visible,.zb:focus-visible,.node:focus-visible{outline:2px solid var(--hi);outline-offset:2px}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;justify-content:space-between}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--mute);align-items:center}
+.lg{display:inline-flex;align-items:center;gap:5px}
+.sw{width:16px;height:11px;border:1.5px solid;border-radius:3px;display:inline-block}
+.sw.A{background:var(--A);border-color:var(--Ab)} .sw.B{background:var(--B);border-color:var(--Bb)}
+.sw.F{background:var(--F);border-color:var(--Fb);border-radius:7px} .sw.X{background:var(--X);border-color:var(--Xb)}
+.sw.off{border-style:dotted;border-color:var(--mute)} .sw.diag{border-style:dashed;border-color:var(--mute)}
+.zoom{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--mute)}
+.zb{font:inherit;font-size:12px;padding:3px 9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:4px;cursor:pointer}
+figure{margin:0;display:flex;flex-direction:column;gap:8px}
+figcaption{color:var(--mute);font-size:13px;max-width:100ch}
+.stage{overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel);max-width:100%}
+.sizer{position:relative}
+.canvas{position:absolute;left:0;top:0;transform-origin:0 0;display:grid;width:max-content;column-gap:var(--cg);row-gap:var(--rg);
+  padding:62px 44px 56px 44px;align-items:stretch}
+.canvas>svg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.canvas>svg.under{z-index:0} .canvas>svg.over{z-index:3}
+.lane{align-self:end;font-size:12px;font-weight:700;color:var(--mute);letter-spacing:.02em;padding-bottom:2px;border-bottom:2px solid var(--line);position:relative;z-index:1}
+.node{position:relative;z-index:1;border:1.5px solid var(--nb);background:var(--nbg);border-radius:6px;padding:8px 10px 9px;font-size:11.5px;line-height:1.42;
+  display:flex;flex-direction:column;gap:4px;min-width:0;transition:opacity .15s}
+.o-A{--nb:var(--Ab);--nbg:var(--A)} .o-B{--nb:var(--Bb);--nbg:var(--B)} .o-x{--nb:var(--Xb);--nbg:var(--X)}
+.k-file{--nb:var(--Fb);--nbg:var(--F);border-radius:14px}
+.k-ext.o-x{--nb:var(--Xb);--nbg:var(--X)}
+.k-ext{border-style:double;border-width:3px}
+.s-off{border-style:dotted} .s-diag{border-style:dashed}
+.hd{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.nm{font-family:var(--mono);font-weight:600;font-size:12px;overflow-wrap:anywhere;line-height:1.3}
+.tag{font-size:10px;color:var(--mute);white-space:nowrap;padding-top:1px}
+.io{display:grid;grid-template-columns:26px 1fr;gap:4px}
+.io b{font-family:var(--mono);font-size:9.5px;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;padding-top:2px}
+.io span{overflow-wrap:anywhere}
+.nt{color:var(--mute);font-size:11px;overflow-wrap:anywhere}
+.lk{font-size:10.5px;color:var(--mute);text-decoration:none;border-top:1px solid var(--line);padding-top:3px;overflow-wrap:anywhere}
+.lk:hover{color:var(--hi)}
+.bdg{align-self:flex-start;font-size:10px;font-weight:700;padding:0 6px;border-radius:3px;background:var(--warnbg);color:var(--warn)}
+path.edge{fill:none;stroke:var(--edge);stroke-width:1.4;transition:opacity .15s}
+path.edge.dash{stroke-dasharray:5 4}
+path.edge.on{stroke:var(--hi);stroke-width:2.2}
+.elab{font-family:var(--mono);font-size:10px;fill:var(--mute);text-anchor:middle;paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round;transition:opacity .15s}
+.elab.on{fill:var(--hi);font-weight:600}
+.canvas.hl .node:not(.me):not(.nb2){opacity:.3}
+.canvas.hl path.edge:not(.on){opacity:.1}
+.canvas.hl .elab:not(.on){opacity:.08}
+.foot{font-size:12.5px;color:var(--mute);display:flex;flex-direction:column;gap:3px}
+.foot code,td code{font-family:var(--mono);font-size:11.5px}
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:12.5px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11.5px;color:var(--mute);font-weight:700}
+tr:last-child td{border-bottom:0}
+td.m{font-family:var(--mono);font-size:11.5px;overflow-wrap:anywhere}
+.warnrow td:first-child{box-shadow:inset 3px 0 0 var(--hi)}
+@media (prefers-reduced-motion:reduce){.node,path.edge,.elab{transition:none}}
+</style></head>
+<body>
+<main>
+  <header>
+    <h1>F1TENTH 파이프라인 맵</h1>
+    <p class="sub">2026 IFAC F1TENTH 실차 스택에서 센서 → 위치추정 → 플래닝 → 제어 → VESC로 이어지는 데이터 흐름을 노드·함수 단위로 그린 입출력 지도. 카드에 마우스를 올리면 그 카드에 닿는 화살표만 남는다. 카드 맨 아래 📝는 SecondBrain 볼트의 해당 노트다.</p>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <section class="finds" id="finds" aria-label="구조에서 확인한 점"></section>
+
+  <section style="display:flex;flex-direction:column;gap:12px">
+    <div class="tabs" role="tablist" id="tabs" aria-label="뷰 선택"></div>
+    <div class="bar">
+      <div class="legend" aria-label="범례">
+        <span class="lg"><span class="sw A"></span>제어 · f1tenth_control (내 담당)</span>
+        <span class="lg"><span class="sw B"></span>팀 공용 (planning · 위치추정 · f1tenth_stack)</span>
+        <span class="lg"><span class="sw F"></span>토픽 · 파일</span>
+        <span class="lg"><span class="sw X"></span>하드웨어 · 외부</span>
+        <span class="lg"><span class="sw off"></span>기본 꺼짐</span>
+        <span class="lg"><span class="sw diag"></span>관측·진단 전용</span>
+        <span class="lg">점선 화살표 = 선택·보조·피드백 경로</span>
+      </div>
+      <div class="zoom">
+        <button class="zb" id="zout" aria-label="축소">−</button>
+        <span id="zval" style="min-width:3.2em;text-align:center">100%</span>
+        <button class="zb" id="zin" aria-label="확대">+</button>
+        <button class="zb" id="zfit">맞춤</button>
+        <button class="zb" id="z100">100%</button>
+      </div>
+    </div>
+    <figure>
+      <div class="stage" id="stage"><div class="sizer" id="sizer"><div class="canvas" id="canvas" role="group"></div></div></div>
+      <figcaption id="cap"></figcaption>
+    </figure>
+    <div class="foot" id="foot"></div>
+  </section>
+
+  <section>
+    <h2>조용히 깨지는 결합</h2>
+    <p class="sub" style="margin-bottom:10px">한쪽만 바꾸면 다른 쪽이 경고 없이 틀어지는 파라미터 쌍. 저장소 경계를 넘는 줄(젯슨·VESC·플래닝)에는 왼쪽에 표시를 달았다.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>바꾸는 쪽</th><th>영향받는 쪽</th><th>결합</th><th>안 맞추면</th></tr></thead>
+      <tbody id="ctbl"></tbody>
+    </table></div>
+  </section>
+</main>
+
+<script>
+const DATA = {"V": {"overview": {"label": "전체", "cols": 5, "cap": "센서가 만든 /scan·/odom이 위치추정과 플래닝을 거쳐 /global_waypoints·/local_waypoints가 되고, 내 담당인 제어 열이 이를 50 Hz 조향·속도 명령으로 바꿔 f1tenth_stack 구동 체인을 통해 VESC로 내려간다. 맨 아래 버스는 VESC 명령이 다시 센서로 돌아오는 폐루프다.", "nodes": [{"id": "l1", "c": 1, "r": 1, "k": "lane", "t": "센서 · 하드웨어"}, {"id": "l2", "c": 2, "r": 1, "k": "lane", "t": "위치추정 (팀)"}, {"id": "l3", "c": 3, "r": 1, "k": "lane", "t": "플래닝 (팀)"}, {"id": "l4", "c": 4, "r": 1, "k": "lane", "t": "제어 · f1tenth_control (내 담당)"}, {"id": "l5", "c": 5, "r": 1, "k": "lane", "t": "구동 체인 · f1tenth_stack"}, {"id": "lidar", "c": 1, "r": 2, "k": "ext", "t": "Hokuyo 라이다 · urg_node", "u": "/scan 40 Hz", "m": "이더넷 192.168.0.10:10940. 0819 8초 두절 = TCP 재연결 사이클", "n": "F1T-위치추정 MCL에서 KICP로"}, {"id": "vto", "c": 1, "r": 5, "o": "B", "t": "vesc_to_odom", "i": "/sensors/core ERPM, /sensors/imu ψ̇", "u": "/odom (vx, 자이로 헤딩)", "m": "vx = ERPM / 4420. 07-28 조향명령 합성 → 자이로 헤딩(요레이트 배율 1.36 → 0.998)", "n": "F1T-오도메트리·SLAM·맵 정합"}, {"id": "vesc", "c": 1, "r": 6, "k": "ext", "t": "VESC 6 · FOC (HFI / 센서리스)", "i": "motor/speed | motor/brake, servo/position", "u": "/sensors/core (ERPM·전류) · /sensors/imu (deg/s, g)", "m": "s_pid_kp 0.006 · 램프 21160 ERPM/s = 4.79 m/s² · 60 A", "n": "F1T-종방향 VESC 한계와 출발"}, {"id": "map", "c": 2, "r": 2, "k": "file", "t": "kissmap · map.pgm (동결)", "m": "slam_toolbox 오프라인 매핑. 직선 잔차 2.5~3 cm = 셀의 절반", "n": "F1T-오도메트리·SLAM·맵 정합"}, {"id": "kicp", "c": 2, "r": 3, "o": "B", "t": "kinematic_localization (KICP)", "i": "/scan, /odom twist, kissmap", "u": "/pf/pose/odom 40 Hz + map→odom TF", "m": "MCL 대비 잔차 p99 300 → 92 mm, 0.5 m 점프 6 → 0회. 스캔 0.4 s 두절이면 발행 중단", "n": "F1T-위치추정 MCL에서 KICP로"}, {"id": "pose", "c": 2, "r": 4, "k": "file", "t": "/pf/pose/odom", "u": "pose + twist(휠 패스스루)", "m": "MCL과 같은 인터페이스 → 컨트롤러 코드 변경 0줄"}, {"id": "traj", "c": 3, "r": 2, "o": "B", "t": "offline_trajectory_generator", "i": "트랙 경계, velocity_limits.csv, --max-lateral-accel", "u": "레이싱 라인 x, y, s, ψ, κ, vx", "m": "생성기 MLA = 계획 예산. 컨트롤러 클램프는 그 1.15배", "n": "F1T-결선 세팅"}, {"id": "gwp", "c": 3, "r": 3, "k": "file", "t": "/global_waypoints (WpntArray, latched)", "u": "x, y, s, ψ, κ, vx, d_left / d_right", "n": "F1T-시스템 구조"}, {"id": "frenet", "c": 3, "r": 4, "o": "B", "t": "frenet_odom_node", "i": "/pf/pose/odom, 글로벌 라인", "u": "/car_state/frenet/odom (s, d, vs)", "m": "무상태 전역 투영 → 0807 s가 0.05초에 13 m 점프 → 경로 반전", "n": "F1T-경로 소스와 인덱스 추적 버그"}, {"id": "opp", "c": 3, "r": 5, "o": "B", "t": "opponent_detector · tracker", "i": "/scan + map TF", "u": "/opp_obs (s, vs, 공분산)", "m": "ego·장애물 포즈 오차가 공통모드 → 코너 배치 오차 ≈ 3 cm"}, {"id": "sm", "c": 3, "r": 6, "o": "B", "t": "state_machine · local_planner", "i": "frenet s, /opp_obs", "u": "/local_waypoints · /state", "m": "/local_waypoints 발행자는 state_machine. 정지는 vx_mps = 0 웨이포인트로 표현"}, {"id": "sec", "c": 4, "r": 2, "o": "A", "s": "off", "t": "sector_learner.py", "i": "odom, IMU, /scan, /drive_autonomous, /state, /global_waypoints", "u": "/sector_scales (1 Hz 하트비트)", "m": "static / guard / explore. 결선 기본값에서 뺐다", "n": "F1T-섹터 스케일과 자가학습"}, {"id": "cruise", "c": 4, "r": 3, "o": "A", "t": "cruise_controller_node", "i": "/state, /opp_obs, ego frenet, /global_waypoints", "u": "/cruise_speed_limit · /cruise/gap_data", "m": "STATE_CRUISE에서만 상한. 입력 stale이면 1.5 m/s", "n": "F1T-크루즈 컨트롤러"}, {"id": "cmap", "c": 4, "r": 4, "o": "A", "t": "control_map_node (50 Hz)", "i": "/pf/pose/odom, VESC /odom, IMU, global·local 웨이포인트, cruise·sector·drive_mode·state", "u": "/drive_autonomous (speed, steer, accel = d(cmd)/dt)", "m": "L1 → FF/FB → 자전거 역모델. 내부 단계는 다음 탭", "n": "F1T-시스템 구조"}, {"id": "sel", "c": 4, "r": 5, "o": "A", "t": "drive_source_selector", "i": "/drive_autonomous", "u": "/drive", "m": "재스탬프 포워더. 08-01 MPPI 제거로 셀렉터 → 포워더", "n": "F1T-MPPI 대안 컨트롤러"}, {"id": "bag", "c": 4, "r": 6, "k": "file", "t": "rosbag (jetson_rec.sh)", "m": "전 토픽 + /debug/l1_lookahead 녹화 → 분석 도구 탭", "n": "F1T-분석 도구"}, {"id": "joy", "c": 5, "r": 2, "k": "ext", "t": "조이스틱 /joy"}, {"id": "dmm", "c": 5, "r": 3, "o": "B", "t": "drive_mode_manager", "i": "/joy", "u": "teleop (pri 100) · estop_lock · /drive_mode", "m": "E-stop = mux 입력 전체 마스킹"}, {"id": "mux", "c": 5, "r": 4, "o": "B", "t": "ackermann_mux", "i": "/drive (navigation pri 10), teleop", "u": "Ackermann 명령 1개"}, {"id": "a2v", "c": 5, "r": 5, "o": "B", "t": "ackermann_to_vesc (팀 패치)", "i": "speed, steer, /sensors/core", "u": "motor/speed 또는 motor/brake · servo/position", "m": "좌/우 서보 게인 −0.5785 / −0.4702 · servo 0.23~0.66 사전 클램프 · 서비스 브레이크", "n": "F1T-조향 하드웨어 캘리브레이션"}, {"id": "vd", "c": 5, "r": 6, "o": "B", "t": "vesc_driver", "i": "VESC 명령", "u": "시리얼 /dev/ttyACM0", "m": "클리핑 로그가 시리얼을 굶겨 IMU 50 → 39 Hz → odom 구식 경로 폴백"}], "edges": [{"a": "lidar", "b": "kicp", "l": "/scan"}, {"a": "lidar", "b": "opp"}, {"a": "vesc", "b": "vto", "l": "core, imu"}, {"a": "vto", "b": "kicp", "l": "/odom twist"}, {"a": "map", "b": "kicp"}, {"a": "kicp", "b": "pose"}, {"a": "pose", "b": "frenet"}, {"a": "pose", "b": "cmap"}, {"a": "traj", "b": "gwp"}, {"a": "gwp", "b": "frenet"}, {"a": "gwp", "b": "cmap"}, {"a": "gwp", "b": "cruise"}, {"a": "frenet", "b": "sm", "l": "s"}, {"a": "frenet", "b": "cruise", "l": "ego s, vs"}, {"a": "opp", "b": "sm"}, {"a": "opp", "b": "cruise", "l": "/opp_obs"}, {"a": "sm", "b": "cmap", "l": "/local_waypoints\n/state"}, {"a": "cruise", "b": "cmap", "l": "/cruise_speed_limit"}, {"a": "sec", "b": "cmap", "d": 1, "p": ["r", "r"]}, {"a": "cmap", "b": "sel", "l": "/drive_autonomous"}, {"a": "sel", "b": "mux", "l": "/drive"}, {"a": "joy", "b": "dmm"}, {"a": "dmm", "b": "mux", "l": "teleop, estop"}, {"a": "dmm", "b": "cmap", "l": "/drive_mode"}, {"a": "mux", "b": "a2v"}, {"a": "a2v", "b": "vd"}, {"a": "vd", "b": "vesc", "route": "bottom", "lane": 0, "l": "시리얼 명령 → 모터·서보"}], "foot": ["색: 파랑 = 이 저장소(f1tenth_control), 초록 = 팀 공용(planning·위치추정·f1tenth_stack), 보라 = 하드웨어·외부.", "수동/자율/E-stop Mux는 이 저장소 담당이 아니다. 실차는 drive_mode_manager + ackermann_mux가, 시뮬은 selector가 /drive를 gym_bridge에 직결한다."]}, "cmap": {"label": "control_map_node 루프", "cols": 8, "cap": "한 사이클(20 ms)의 실행 순서. 왼쪽 위는 안전 게이트와 경로 기하, 1행 오른쪽은 조향 생성, 3행은 속도 생성, 4행은 IMU 콜백과 자이로 기반 추정기다. 두 갈래가 /drive_autonomous 한 메시지로 합쳐진다. 조향과 속도는 같은 자전거 모델·같은 mla를 쓴다.", "nodes": [{"id": "cbo", "c": 1, "r": 1, "o": "A", "t": "odom_callback", "i": "/pf/pose/odom", "u": "x, y, yaw, v · 수신 시각", "m": "NaN/Inf 샘플은 콜백에서 버린다"}, {"id": "s0a", "c": 2, "r": 1, "o": "A", "t": "0-a · odom 게이트 · 워치독", "i": "odom_seen, odom_age", "u": "통과 | 안전 정지", "m": "미수신이면 출발 안 함. 0.35 s 두절 → 속도 0, 조향은 직전 각 유지 (0818 1.1 s 동결 사고)", "n": "F1T-02 오류-수정 대장"}, {"id": "s0", "c": 2, "r": 2, "o": "A", "t": "0 · 경로 소스 중재", "i": "local (신선 0.3 s) · global", "u": "wps (이번 사이클 배열)", "m": "로컬에 진행방향 ±80° (1.40 rad) 후보가 없으면 글로벌로 폴백 — 0807 반전 대응", "n": "F1T-경로 소스와 인덱스 추적 버그"}, {"id": "s1", "c": 3, "r": 2, "o": "A", "t": "1 · 최근접 인덱스", "i": "wps, pose", "u": "closest_idx", "m": "직전 인덱스 주변 윈도우 + 헤딩 게이트, 2.5 m 이탈 시 전역 재탐색"}, {"id": "s2", "c": 4, "r": 1, "o": "A", "t": "2 · L1 목표점", "i": "v, closest_idx", "u": "목표점 p_t", "m": "L1 = clip(0.6 + 0.32·v, 0.9, 5.0). |κ|>0.3이면 최대 25% 축소. 호 길이로 전진", "n": "L1 Guidance"}, {"id": "dbg", "c": 4, "r": 2, "k": "file", "t": "/debug/l1_lookahead (50 Hz)", "m": "목표점 점프·κ_L1 재구성용. bag에 반드시 녹화"}, {"id": "cbi", "c": 1, "r": 4, "o": "A", "t": "imu_callback", "i": "/sensors/imu/raw", "u": "a_x = −acc_x·9.81 · ψ̇ = ω_z·π/180", "m": "VESC는 g, deg/s로 발행. 장착 180° → 전방 = −a_x", "n": "F1T-IMU 단위와 축 검증"}, {"id": "lat", "c": 5, "r": 1, "o": "A", "t": "3·5 · sinη → 목표 횡가속", "i": "p_t, yaw, 조향용 v = clamp(실측, 0.5, 프로파일)", "u": "a_lat = 2v²·sinη / max(‖p_t − p‖, 1.3)", "m": "분모는 목표점까지 실제 거리 (07-28). 바닥 0.5 m/s = safe stop 중 바퀴 펴짐 방지"}, {"id": "ff", "c": 6, "r": 1, "o": "A", "t": "FF/FB 분리 + 그립 클램프", "i": "a_lat, 부호 있는 평활 κ, v", "u": "a_cmd = a_ff + 0.8·(a_lat − a_ff), |a_cmd| ≤ mla·1.15", "m": "a_ff = κ·v². 클램프에만 마진 1.15 — 속도 캡은 마진 없이", "n": "F1T-추종오차 개선"}, {"id": "inv", "c": 7, "r": 1, "o": "A", "t": "자전거 역모델", "i": "a_cmd, v, K_us (좌 0.014 / 우 0.019)", "u": "δ = a_cmd·(L/v² + K_us)", "m": "LUT 대체 (08-17). v²이 첫 항에서 소거 → 정지 풀락이 구조적으로 불가능", "n": "F1T-조향 생성 전환"}, {"id": "post", "c": 8, "r": 1, "o": "A", "t": "조향 후처리", "i": "δ, trim", "u": "δ_pub", "m": "+트림 → ÷reach 1.0 → rate 20 rad/s → clamp 좌·우 0.410"}, {"id": "cbw", "c": 1, "r": 3, "o": "A", "t": "waypoint 콜백 (global · local)", "i": "/global_waypoints, /local_waypoints", "u": "Waypoint[]: 평활 |κ|·부호 κ, mla = MLA × 섹터 scale", "m": "섹터 스케일은 수신 때 1회 굽는다 — 50 Hz 루프에 검색이 안 들어간다"}, {"id": "s15", "c": 4, "r": 3, "o": "A", "t": "1.5 · 곡률 사전감속", "i": "wps κ·mla, v, prebrake_decel 3.2", "u": "curvature_speed_limit", "m": "제동거리 v²/2a (≥ 8 m) 전방 스캔. 지점 캡 = min(√(mla/κ), 조향 권한) → backward-pass", "n": "F1T-곡률 사전감속"}, {"id": "s7", "c": 5, "r": 3, "o": "A", "t": "7 · 목표 속도", "i": "프로파일 vx, 곡률 캡, max_speed 9.0, cruise 캡", "u": "target_speed = min(…)", "m": "cruise 0.15 s stale → 1.5 m/s. 프로세스 시작부터 fail-closed"}, {"id": "u1", "c": 6, "r": 3, "o": "A", "t": "7-a · U1 그립 권한 클램프", "i": "κ_L1 = 2·abs(sinη) / L1_denom", "u": "v ≤ √(MLA / κ_L1_filt)", "m": "진입 즉시 · 해제 α 0.15. 실측 a_lat > 7.8 예고율 96.6%"}, {"id": "ramp", "c": 7, "r": 3, "o": "A", "t": "8 · 램프 + 안티와인드업", "i": "target, last_cmd, 실측 v", "u": "final_speed", "m": "가속 5.5 / 감속 8.0 m/s². 램프 ≤ 실측 + 3.5 m/s", "n": "F1T-종방향 VESC 한계와 출발"}, {"id": "gate", "c": 8, "r": 3, "o": "A", "t": "8-a2 engage → 8-d HFI 가드", "i": "/drive_mode, VESC /odom", "u": "발행 속도", "m": "미체결 중 램프 = 실측 (bumpless). 정지출발 0.9 m/s 캡", "n": "F1T-센서리스 데드존과 HFI 출발"}, {"id": "cbm", "c": 5, "r": 4, "o": "A", "t": "cruise · sector 콜백", "i": "/cruise_speed_limit, /sector_scales, /state", "u": "cruise 캡 + 수신 시각 · 섹터 표", "m": "섹터 표는 데드맨 3 s. /state를 모르면 스케일을 끈다"}, {"id": "cbd", "c": 7, "r": 2, "o": "A", "t": "drive_mode · VESC odom 콜백", "i": "/drive_mode, /odom", "u": "체결 상태 · HFI 전진속도", "m": "/drive_mode 1 s 미수신이면 게이트 자동 비활성 (시뮬 호환)"}, {"id": "trim", "c": 8, "r": 4, "o": "A", "t": "6-8 · 조향 트림 추정", "i": "δ_pub(t − 140 ms), ψ̇, v", "u": "steering_trim (±0.06 rad)", "m": "직선 (|a_lat| ≤ 2)만 학습. τ 4 s LPF + 웜업, ~/.f1tenth/steering_trim.yaml 저장·복원", "n": "F1T-조향 하드웨어 캘리브레이션"}, {"id": "kus", "c": 7, "r": 4, "o": "A", "s": "diag", "t": "6-9 · K_us 곡선 추정", "i": "δ_pub(t − 140 ms), ψ̇, v", "u": "K_us(a_lat) 4빈", "m": "코너 (|a_lat| ≥ 3)만 학습 — 트림과 영역 배타. 기본은 관측만", "n": "F1T-타이어 비선형성과 K_us 곡선"}, {"id": "slip", "c": 6, "r": 4, "o": "A", "s": "diag", "t": "6-10 · 슬립 잔차", "i": "a_y, v·ψ̇", "u": "로그", "m": "독립 두 경로의 차이 = 미끄러짐. β 적분은 07-29 게이트 불통과"}, {"id": "pub", "c": 8, "r": 2, "k": "file", "t": "/drive_autonomous", "u": "speed, steering_angle, acceleration = d(cmd)/dt", "m": "accel을 (명령 − 실측)/dt로 내던 버그 07-30 수정"}], "edges": [{"a": "cbo", "b": "s0a"}, {"a": "s0a", "b": "s0"}, {"a": "s0", "b": "s1"}, {"a": "s1", "b": "s2"}, {"a": "s2", "b": "dbg", "d": 1}, {"a": "s2", "b": "lat", "l": "p_t"}, {"a": "lat", "b": "ff", "l": "a_lat"}, {"a": "ff", "b": "inv", "l": "a_cmd"}, {"a": "inv", "b": "post", "l": "δ"}, {"a": "post", "b": "pub", "l": "δ_pub"}, {"a": "cbw", "b": "s0", "l": "wps"}, {"a": "cbw", "b": "s15", "l": "κ, mla"}, {"a": "s1", "b": "s15", "l": "idx"}, {"a": "s15", "b": "s7", "l": "곡률 캡"}, {"a": "s7", "b": "u1"}, {"a": "lat", "b": "u1", "l": "κ_L1"}, {"a": "u1", "b": "ramp"}, {"a": "ramp", "b": "gate"}, {"a": "gate", "b": "pub", "l": "speed"}, {"a": "cbm", "b": "s7", "l": "cruise 캡"}, {"a": "cbd", "b": "gate"}, {"a": "cbi", "b": "slip", "route": "bottom", "lane": 0, "d": 1}, {"a": "cbi", "b": "kus", "route": "bottom", "lane": 1, "d": 1}, {"a": "cbi", "b": "trim", "route": "bottom", "lane": 2, "l": "ψ̇"}, {"a": "trim", "b": "post", "p": ["r", "r"], "l": "trim"}, {"a": "kus", "b": "inv", "d": 1, "p": ["l", "l"], "l": "K_us (켤 때만)"}], "foot": ["생략한 선: 조향용 v는 2행 전체가 공유하고, heading_damping(6-4, 게인 0)과 가감속 조향 스케일러(1.0 = 무개입)는 그림에서 뺐다.", "트림·K_us 추정기는 rate limit·클램프를 거친 <b>최종 발행값</b>으로 학습한다. 원래 명령으로 배우면 포화 구간에서 없는 오차를 배운다."]}, "long": {"label": "종방향 · 출발", "cols": 7, "cap": "속도 명령이 VESC 전류가 되기까지. 1행은 컨트롤러 안의 속도 체인, 2행은 HFI 정지출발 가드의 실패·재시도 분기, 오른쪽 아래는 젯슨 쪽 중재와 VESC 내부. /sensors/core가 두 곳(서비스 브레이크, HFI 판정)으로 되먹임된다.", "nodes": [{"id": "tgt", "c": 1, "r": 1, "k": "ext", "o": "A", "t": "[루프 7] target_speed", "u": "min(프로파일, 곡률 캡, cruise, U1)"}, {"id": "rl", "c": 2, "r": 1, "o": "A", "t": "rate_limit_speed_command", "i": "last_cmd, target, dt", "u": "cmd", "m": "가속 5.5 / 감속 8.0 m/s². 분기는 target − last_cmd로 (0821 역계단 수정)"}, {"id": "lead", "c": 3, "r": 1, "o": "A", "t": "램프 안티와인드업", "i": "cmd, 실측 v", "u": "cmd ≤ v + 3.5", "m": "60 A에 필요한 선행 = 60 / 0.006 ERPM = 2.26 m/s. 그 이상은 순수 와인드업 (0807 급발진)", "n": "안티와인드업"}, {"id": "eng", "c": 4, "r": 1, "o": "A", "t": "engage 게이트", "i": "/drive_mode", "u": "미체결이면 램프 = 실측", "m": "자율 진입 순간 계단 명령 차단 (bumpless)", "n": "범프리스 전환"}, {"id": "hfi", "c": 5, "r": 1, "o": "A", "t": "HFI 정지출발 가드", "i": "VESC /odom 전진속도 (정지 0.12/0.20 Schmitt)", "u": "cap 0.9 m/s → 해제 시 램프 이어감", "m": "+0.5 m/s가 0.1 s 연속이면 해제. real on / sim off", "n": "F1T-센서리스 데드존과 HFI 출발"}, {"id": "pub", "c": 6, "r": 1, "k": "file", "t": "/drive_autonomous speed"}, {"id": "fail", "c": 5, "r": 2, "o": "A", "t": "실패 판정", "u": "무전진 3.0 s (순전진 < 5 cm) · 역회전 0.10 m/s × 0.15 s · timeout 6.0 s", "m": "0822 성공 38창 오탐: 1.2 s 6건 → 3.0 s 1건, 검출 손실 0", "n": "히스테리시스 판정"}, {"id": "retry", "c": 4, "r": 2, "o": "A", "t": "정지 dwell → 재시도", "m": "속도 0 + VESC 정지 0.5 s 뒤 재시도, 총 3회. 재시도는 항상 기본 cap부터"}, {"id": "latch", "c": 3, "r": 2, "o": "A", "t": "최종 래치 + 자동 해제", "m": "탈출구 없던 래치 (0822 자율 30초 정지) → 순변위 누출적분 3 s 무전진이면 재무장. fuzz 최악 7.8 s", "n": "페일세이프 설계"}, {"id": "vto", "c": 7, "r": 1, "o": "B", "t": "vesc_to_odom → /odom", "u": "vx = ERPM / 4420", "m": "HFI 판정 전용 속도원. 경로 추종은 /pf/pose/odom"}, {"id": "core", "c": 7, "r": 2, "k": "file", "t": "/sensors/core", "u": "ERPM, 전류 (온도는 0으로 보고)"}, {"id": "vesc", "c": 7, "r": 3, "k": "ext", "t": "VESC 속도 PID → FOC", "i": "ERPM 명령 | 제동 전류", "u": "q축 전류", "m": "s_pid_kp 0.006 · 램프 21160 ERPM/s (4.79 m/s²) · 60 A · speed_max 40000 (9.05 m/s)", "n": "센서리스 FOC"}, {"id": "brake", "c": 6, "r": 3, "o": "B", "t": "ackermann_to_vesc 서비스 브레이크", "i": "명령 ERPM, 실측 ERPM (≤ 0.2 s)", "u": "motor/speed 또는 motor/brake (배타)", "m": "over = dir·(실측 − 명령) > 500 → brake = min(0.0024·over, 8 A). 0819 8 A 포화 38.7% → prebrake는 3.5가 상한 (현재 3.2)", "n": "F1T-종방향 VESC 한계와 출발"}, {"id": "mux", "c": 6, "r": 2, "k": "ext", "o": "B", "t": "selector → ackermann_mux", "u": "/drive (navigation pri 10)"}], "edges": [{"a": "tgt", "b": "rl"}, {"a": "rl", "b": "lead"}, {"a": "lead", "b": "eng"}, {"a": "eng", "b": "hfi"}, {"a": "hfi", "b": "pub"}, {"a": "hfi", "b": "fail", "l": "판정"}, {"a": "fail", "b": "retry"}, {"a": "retry", "b": "hfi", "l": "재무장"}, {"a": "retry", "b": "latch", "l": "3회 소진"}, {"a": "latch", "b": "hfi", "d": 1, "l": "3 s 무전진"}, {"a": "pub", "b": "mux"}, {"a": "mux", "b": "brake"}, {"a": "brake", "b": "vesc", "l": "speed | brake"}, {"a": "vesc", "b": "core"}, {"a": "core", "b": "brake", "l": "실측 ERPM"}, {"a": "core", "b": "vto"}, {"a": "vto", "b": "hfi", "route": "top", "lane": 0, "l": "/odom 전진속도 · 순변위"}], "foot": ["HFI는 2026-08-22 별도 mcconf(<code>vesc_mcconf_hfi_test.xml</code>, foc_sensor_mode 3)로 실차 출발이 확인됐다. 그 전 센서리스 오픈루프는 lock 0.2 + ramp 0.52 + dwell 0.3 = 1.02 s.", "런치 킥(launch_boost)은 실측상 inert라 결선 기본 off — 탈조 중 램프가 이미 킥보다 높아 max()가 킥을 고른 적이 없다."]}, "cruise": {"label": "크루즈 (ACC)", "cols": 5, "cap": "상대차를 따라갈 때만 켜지는 종방향 상한. 간격의 위치·속도 공분산을 제동 시간만큼 전파해 보수적 간격을 만들고, 피드백·제동 캡·비상정지 중 가장 낮은 값을 control_map_node의 목표 속도에 min()으로 건다.", "nodes": [{"id": "opp", "c": 1, "r": 1, "k": "file", "t": "/opp_obs", "u": "s, vs, s_var, vs_var, s_vs_cov"}, {"id": "ego", "c": 1, "r": 2, "k": "file", "t": "/car_state/frenet/odom", "u": "ego s, vs"}, {"id": "st", "c": 1, "r": 3, "k": "file", "t": "/state", "u": "GLOBAL · CRUISE · OT …"}, {"id": "gw", "c": 1, "r": 4, "k": "file", "t": "/global_waypoints", "u": "track_length (랩 wrap 처리)"}, {"id": "node", "c": 2, "r": 2, "o": "A", "t": "cruise_controller_node", "i": "위 4개 입력", "u": "CruiseControllerInput", "m": "CRUISE 아니면 maximum_speed (무제약). CRUISE인데 입력 stale·타깃 없음 → blind 1.5 m/s", "n": "F1T-크루즈 컨트롤러"}, {"id": "dg", "c": 3, "r": 1, "o": "A", "t": "desiredGap()", "i": "trailing_gap 5.0 (거리모드), ego vs", "u": "desired_gap", "m": "거리모드 max(standstill, trailing) · 시간모드 standstill + T·v"}, {"id": "unc", "c": 3, "r": 2, "o": "A", "t": "간격 불확실성 전파", "i": "s_var, vs_var, s_vs_cov, τ_s", "u": "σ_g, effective_gap = gap − 2σ_g", "m": "σ_g²(τ) = s_var + 2τ·cov + τ²·vs_var"}, {"id": "fb", "c": 4, "r": 1, "o": "A", "t": "피드백 PID", "i": "effective_gap − desired_gap", "u": "v_fb", "m": "P 1.0 · I 0 · D 0.2"}, {"id": "brk", "c": 4, "r": 2, "o": "A", "t": "제동 캡", "i": "usable gap, v_opp 하한, b_ego, τ", "u": "v = −bτ + √((bτ)² + 2b·reach)", "m": "τ = 0, b_ego = b_opp이면 √(v_opp² + 2b·gap)과 비트 동일"}, {"id": "em", "c": 4, "r": 3, "o": "A", "t": "비상 정지", "i": "gap − 2σ_s0", "u": "0 (< 0.45 m)"}, {"id": "mn", "c": 5, "r": 2, "o": "A", "t": "min() + 제약 태그", "u": "speed_limit, constraint", "m": "feedback / braking / emergency / max_speed / no_accel", "n": "적응형 순항제어"}, {"id": "out", "c": 5, "r": 3, "k": "file", "t": "/cruise_speed_limit · /cruise/gap_data"}, {"id": "cm", "c": 5, "r": 4, "k": "ext", "o": "A", "t": "→ control_map_node 7단계", "m": "0.15 s stale → 1.5 m/s. 첫 메시지 전에도 fail-closed"}], "edges": [{"a": "opp", "b": "node"}, {"a": "ego", "b": "node"}, {"a": "st", "b": "node"}, {"a": "gw", "b": "node"}, {"a": "node", "b": "dg"}, {"a": "node", "b": "unc"}, {"a": "dg", "b": "fb", "l": "desired"}, {"a": "unc", "b": "fb", "l": "eff. gap"}, {"a": "unc", "b": "brk"}, {"a": "unc", "b": "em"}, {"a": "fb", "b": "mn"}, {"a": "brk", "b": "mn"}, {"a": "em", "b": "mn"}, {"a": "mn", "b": "out"}, {"a": "out", "b": "cm"}], "foot": ["구조체 기본값(0)은 전파 없음 = 위치 불확실성만 쓰는 구식과 비트 단위로 같게 짜여 있다 — 새 항을 켤 때만 거동이 바뀐다."]}, "sector": {"label": "섹터 학습", "cols": 5, "cap": "보수적 라인으로 달리면서 코너별 횡가속 예산을 스스로 올리는 학습기. 판단은 이 Python 노드가, 실행과 검증은 control_map_node가 한다. 어떤 실패든 결과는 scale 1.0 = 전역 MLA로 돌아가는 쪽이다.", "nodes": [{"id": "wp", "c": 1, "r": 1, "k": "file", "t": "/global_waypoints", "u": "κ, track_length"}, {"id": "sens", "c": 1, "r": 2, "k": "file", "t": "odom · IMU · /scan · /drive_autonomous", "m": "전부 BEST_EFFORT로 구독 — RELIABLE이면 한 건도 못 받으면서 정상처럼 보인다"}, {"id": "st", "c": 1, "r": 3, "k": "file", "t": "/state · /drive_mode"}, {"id": "tbl", "c": 2, "r": 3, "o": "A", "t": "표 로드", "i": "sector_scale_file | learned/ 최신 (guard 모드)", "u": "섹터 [s0, s1, scale]", "m": "파일 없으면 표 없이 부팅. 0랩 파일은 건너뜀, 최신은 파일명 시각"}, {"id": "auto", "c": 2, "r": 1, "o": "A", "t": "autobuild_sectors()", "i": "κ, corner κ 0.30", "u": "κ 최소점에 스냅한 경계, scale 1.0", "m": "랩길이 불일치 = 라인 재생성 → 옛 표는 재해석 아니라 폐기"}, {"id": "lap", "c": 3, "r": 2, "o": "A", "t": "랩별 게이트 통계", "i": "벽 여유 (/scan), 횡오차, 조향 포화, K_us", "u": "섹터별 통과 | 위반", "m": "여유 p5 ≥ 0.20 · min ≥ 0.12 · 횡오차 p95 ≤ 0.35 · 포화 ≤ 2% · K_us 비상승 (초기 3랩 기준 고정)"}, {"id": "aimd", "c": 4, "r": 2, "o": "A", "t": "AIMD 갱신", "i": "모드 static | guard | explore", "u": "scale", "m": "+0.05 (연속 2랩 통과) / −0.15 즉시 + 잠금. explore 잠금은 깨끗한 3랩이면 해제", "n": "AIMD"}, {"id": "pub", "c": 5, "r": 1, "k": "file", "t": "/sector_scales", "u": "[track_length, (s0, s1, scale)×N]", "m": "transient_local + 1 Hz 하트비트"}, {"id": "cm", "c": 5, "r": 2, "k": "ext", "o": "A", "t": "control_map_node 검증", "m": "scale ≥ 1.0 clamp · track_length ±0.02 m · 회피 중 끔 · 데드맨 3 s", "n": "F1T-섹터 스케일과 자가학습"}, {"id": "save", "c": 5, "r": 3, "k": "file", "t": "learned/learned_sectors_MMDD_HHMMSS.yaml", "m": "자동 저장 → f1learn으로 젯슨에서 회수"}], "edges": [{"a": "wp", "b": "auto"}, {"a": "auto", "b": "lap", "l": "경계"}, {"a": "sens", "b": "lap"}, {"a": "st", "b": "lap", "route": "bottom", "lane": 0, "l": "회피 · 체결"}, {"a": "tbl", "b": "lap"}, {"a": "lap", "b": "aimd"}, {"a": "aimd", "b": "pub"}, {"a": "aimd", "b": "save"}, {"a": "pub", "b": "cm"}, {"a": "save", "b": "tbl", "d": 1, "route": "bottom", "lane": 1, "l": "다음 guard 주행"}], "foot": ["시뮬 리플레이: 보수 라인(a_lat 5.0)에서 학습이 −0.61 s를 되찾고, 그건 라인을 처음부터 6.0으로 뽑은 랩과 같다 — steering_accel_margin 1.15로 속도 캡과 조향 클램프를 분리한 뒤에야 성립했다."]}, "tools": {"label": "분석 도구", "cols": 5, "cap": "실차 → 기록 → 오프라인 분석의 흐름. 파라미터 결정은 전부 이 오른쪽 열에서 나온 숫자로 했다.", "nodes": [{"id": "car", "c": 1, "r": 1, "k": "ext", "t": "젯슨 실차 스택"}, {"id": "rec", "c": 2, "r": 1, "o": "A", "t": "jetson_rec.sh · f1rec", "u": "mcap bag", "m": "/debug/l1_lookahead 포함 — 빠지면 점프 횟수조차 못 센다"}, {"id": "load", "c": 2, "r": 2, "o": "A", "t": "jetson_load.sh", "u": "sys.csv (PSI · tick_slip · 이더넷 링크), proc.csv", "m": "PSI total diff — avg10은 1 s 사건을 10배 희석"}, {"id": "net", "c": 2, "r": 3, "o": "A", "t": "f1net_client.sh", "u": "DDS 디스커버리 판정", "m": "\"토픽 0개\"의 실제 원인은 랩탑 ufw DROP"}, {"id": "bag", "c": 3, "r": 1, "k": "file", "t": "rosbag"}, {"id": "ba", "c": 4, "r": 1, "o": "A", "t": "bag_analyzer · analyze_bag.py · webapp", "u": "CRITICAL 체크, 랩·추종·종방향", "m": "조향 상수 바꾼 날은 저속 CRITICAL 0건 후 전속", "n": "F1T-분석 도구"}, {"id": "grip", "c": 4, "r": 2, "o": "A", "t": "analyze_grip_envelope · compare_steering_model", "u": "a_lat 포락선, K_us(a_lat), LUT vs 역모델", "m": "준정상 게이트로 자이로↔가속도계 상관 0.86 → 0.97", "n": "F1T-타이어 비선형성과 K_us 곡선"}, {"id": "secc", "c": 4, "r": 3, "o": "A", "t": "analyze_sector_clearance", "u": "섹터별 벽 여유 · 🟢/🔴 · YAML 초안"}, {"id": "simt", "c": 4, "r": 4, "o": "A", "t": "sim_tracking_sweep · ladder", "u": "폐루프 추종오차 스윕", "m": "decel scaler 0.85가 실측 >0.2 m 52.5%를 재현 → 1.0", "n": "F1T-추종오차 개선"}, {"id": "od", "c": 5, "r": 1, "o": "A", "t": "odom_diag", "u": "자이로 스케일 · 거리 게인 · SLAM 재현 · 포즈 붕괴", "m": "외부 기준자 = 닫힌 루프 360°, 라이다 mm", "n": "F1T-오도메트리·SLAM·맵 정합"}, {"id": "jl", "c": 3, "r": 2, "o": "A", "t": "analyze_jetson_load", "i": "bag + 부하 폴더", "u": "멈춘 순간의 원인 판정"}, {"id": "lut", "c": 5, "r": 2, "o": "A", "s": "off", "t": "lut_calibrator (보존)", "m": "LUT 삭제(08-17) 후 소비처 없음"}], "edges": [{"a": "car", "b": "rec"}, {"a": "car", "b": "load"}, {"a": "car", "b": "net", "d": 1}, {"a": "rec", "b": "bag"}, {"a": "bag", "b": "ba"}, {"a": "bag", "b": "grip"}, {"a": "bag", "b": "secc"}, {"a": "bag", "b": "simt", "d": 1, "l": "라인·실측"}, {"a": "bag", "b": "od", "route": "top", "lane": 0}, {"a": "bag", "b": "jl"}, {"a": "load", "b": "jl"}], "foot": ["도구가 거짓말한 사례(최대치 함정, 충돌 구간 혼입, zsh 단어 분할로 파라미터 무시 등)는 <code>tools/odom_diag/README.md</code>에 8건 정리돼 있다."]}}, "ORDER": ["overview", "cmap", "long", "cruise", "sector", "tools"], "HASH": {"overview": "overview", "cmap": "control-loop", "long": "longitudinal", "cruise": "cruise", "sector": "sector", "tools": "tools"}, "FINDS": [["판단은 planning, 실행은 control", "컨트롤러가 플래너 속도를 자체 판단으로 덮는 경로는 곡률 사전감속·U1 클램프·HFI 가드뿐이고, 셋 다 min()이라 플래너의 감속을 못 덮는다."], ["조향과 속도가 한 모델을 쓴다", "사전감속의 조향 권한 캡과 조향 생성이 같은 자전거 모델·같은 mla를 쓴다. 차이는 클램프에만 얹은 1.15 마진 하나다."], ["추정기 셋은 전부 자이로 기반", "트림·K_us·슬립 잔차 모두 IMU만 쓴다. 줄이려는 대상인 위치추정 오차에 의존하지 않는다."], ["위치추정 붕괴 방어는 3겹", "NaN 게이트, odom 워치독 0.35 s, 진행방향 게이트 1.40 rad. 인덱스 점프 가드는 KICP에서 발동 조건이 사라져 복구하지 않았다."]], "STATS": ["C++ 노드 4 + Python 노드 1", "control_map_node 2,575줄", "50 Hz · 20 ms 루프", "런치 인자 136개", "커밋 193 (2026-05-24 ~)"], "CONTRACTS": [[1, "젯슨 vesc.yaml", "제어", "steering_angle_to_servo_offset 0.4672 ↔ max_steering_right 0.410", "(0.66 − offset)/0.4702 — 0819엔 offset 0.49라 0.361로 내렸다. 안 맞추면 servo_max 클리핑 로그가 시리얼을 굶겨 IMU 50 → 39 Hz → odom이 구식 경로로 폴백한다."], [1, "VESC 설정", "제어", "Imu Rotation Yaw −90° ↔ 코드 축 부호 (전방 = −a_x)", "07-29까지 −a_y를 종가속으로 써서 우선회에서만 조향이 5% 깎였다."], [1, "KICP", "제어", "max_dead_reckoning_sec 0.4 ↔ odom_timeout 0.35", "0819 라이다 8초 두절 때 2.0 s 동안 자신 있게 틀린 포즈를 냈다. 블라인드 구간 14 m → 5.6 m."], [0, "VESC mcconf", "제어", "s_pid_kp 0.006 · l_current_max 60 A ↔ ramp_lead_max", "60 A에 필요한 명령 선행 2.26 m/s. 게인이 바뀌면 안티와인드업 폭을 다시 계산한다."], [0, "젯슨 vesc.yaml", "제어 · 도구", "speed_to_erpm_gain 4420 ↔ odom vx, 분석 도구 G, 가속 천장 환산", "타이어 교체·마모마다 재보정(4614 → 4232 → 4336 → 4420). 틀리면 모든 속도 지표가 같은 비율로 오염된다."], [0, "젯슨 ackermann_to_vesc", "제어", "brake_gain 0.0024 ↔ prebrake_decel 3.2", "컨트롤러가 가정하는 감속을 하드웨어가 실제로 내야 한다. brake_max_current 8 A는 락업 하드캡이라 올리지 않는다."], [0, "플래닝 생성기", "제어", "--max-lateral-accel ↔ max_lateral_accel × steering_accel_margin", "같게 두면 횡오차 보정 예산이 0이 되어 K_us +25%에서 max 1.29 m로 발산한다."], [0, "sector_learner", "제어", "표의 track_length ↔ 현재 라인 길이 (±0.02 m)", "라인을 다시 뽑으면 같은 s가 다른 코너를 가리킨다. 불일치면 표를 통째로 폐기한다."], [0, "제어 (K_us)", "제어 (트림)", "understeer_gradient_left/right ↔ 트림 추정 · 트림 저장본 지문", "K_us를 바꾸면 학습되는 트림도 바뀐다. 저장본은 지문이 다르면 자동 폐기."]], "NOTES": {"AIMD": "30_Concepts/AIMD", "F1T-02 오류-수정 대장": "10_Projects/2026_F1TENTH/F1T-02 오류-수정 대장", "F1T-IMU 단위와 축 검증": "10_Projects/2026_F1TENTH/F1T-IMU 단위와 축 검증", "F1T-MPPI 대안 컨트롤러": "10_Projects/2026_F1TENTH/F1T-MPPI 대안 컨트롤러", "F1T-결선 세팅": "10_Projects/2026_F1TENTH/F1T-결선 세팅", "F1T-경로 소스와 인덱스 추적 버그": "10_Projects/2026_F1TENTH/F1T-경로 소스와 인덱스 추적 버그", "F1T-곡률 사전감속": "10_Projects/2026_F1TENTH/F1T-곡률 사전감속", "F1T-분석 도구": "10_Projects/2026_F1TENTH/F1T-분석 도구", "F1T-섹터 스케일과 자가학습": "10_Projects/2026_F1TENTH/F1T-섹터 스케일과 자가학습", "F1T-센서리스 데드존과 HFI 출발": "10_Projects/2026_F1TENTH/F1T-센서리스 데드존과 HFI 출발", "F1T-시스템 구조": "10_Projects/2026_F1TENTH/F1T-시스템 구조", "F1T-오도메트리·SLAM·맵 정합": "10_Projects/2026_F1TENTH/F1T-오도메트리·SLAM·맵 정합", "F1T-위치추정 MCL에서 KICP로": "10_Projects/2026_F1TENTH/F1T-위치추정 MCL에서 KICP로", "F1T-조향 생성 전환": "10_Projects/2026_F1TENTH/F1T-조향 생성 전환", "F1T-조향 하드웨어 캘리브레이션": "10_Projects/2026_F1TENTH/F1T-조향 하드웨어 캘리브레이션", "F1T-종방향 VESC 한계와 출발": "10_Projects/2026_F1TENTH/F1T-종방향 VESC 한계와 출발", "F1T-추종오차 개선": "10_Projects/2026_F1TENTH/F1T-추종오차 개선", "F1T-크루즈 컨트롤러": "10_Projects/2026_F1TENTH/F1T-크루즈 컨트롤러", "F1T-타이어 비선형성과 K_us 곡선": "10_Projects/2026_F1TENTH/F1T-타이어 비선형성과 K_us 곡선", "L1 Guidance": "30_Concepts/L1 Guidance", "범프리스 전환": "30_Concepts/범프리스 전환", "센서리스 FOC": "30_Concepts/센서리스 FOC", "안티와인드업": "30_Concepts/안티와인드업", "적응형 순항제어": "30_Concepts/적응형 순항제어", "페일세이프 설계": "30_Concepts/페일세이프 설계", "히스테리시스 판정": "30_Concepts/히스테리시스 판정"}, "VAULT": "SecondBrain"};
+const V = DATA.V, ORDER = DATA.ORDER, HASH = DATA.HASH, NOTES = DATA.NOTES, VAULT = DATA.VAULT;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const TAGS = {A:'제어', B:'팀'};
+const BADGE = {off:'기본 꺼짐', diag:'관측 전용'};
+const $ = id => document.getElementById(id);
+
+$('stats').innerHTML = DATA.STATS.map(s => `<span class="stat">${esc(s)}</span>`).join('');
+$('finds').innerHTML = DATA.FINDS.map(([b,t]) => `<div class="find"><b>${esc(b)}</b>${esc(t)}</div>`).join('');
+$('ctbl').innerHTML = DATA.CONTRACTS.map(([w,a,b,c,d]) => `<tr${w?' class="warnrow"':''}><td>${esc(a)}</td><td>${esc(b)}</td><td class="m">${esc(c)}</td><td>${esc(d)}</td></tr>`).join('');
+
+const canvas = $('canvas'), sizer = $('sizer'), stage = $('stage');
+let cur = null, scale = 1, dims = {w:0, h:0};
+
+function noteLink(n){
+  const path = NOTES[n] || n;
+  return `<a class="lk" href="obsidian://open?vault=${encodeURIComponent(VAULT)}&file=${encodeURIComponent(path)}">📝 ${esc(n)}</a>`;
+}
+
+function build(key){
+  const v = V[key];
+  canvas.innerHTML = '';
+  canvas.className = 'canvas';
+  canvas.style.gridTemplateColumns = `repeat(${v.cols}, var(--nw))`;
+  canvas.setAttribute('aria-label', v.label + ' 블록 다이어그램');
+  const under = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  under.setAttribute('class','under');
+  under.innerHTML = '<defs>' +
+    '<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 1 L9.5 5 L0 9 z" style="fill:var(--edge)"/></marker>' +
+    '<marker id="ahh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 1 L9.5 5 L0 9 z" style="fill:var(--hi)"/></marker></defs>';
+  canvas.appendChild(under);
+  const els = {};
+  for (const n of v.nodes){
+    const d = document.createElement('div');
+    d.style.gridColumn = n.c; d.style.gridRow = n.r;
+    if (n.k === 'lane'){ d.className = 'lane'; d.textContent = n.t; canvas.appendChild(d); continue; }
+    const k = n.k || 'fn';
+    d.className = `node k-${k} o-${n.o || 'x'} s-${n.s || 'ok'}`;
+    d.tabIndex = 0; d.dataset.id = n.id;
+    const tag = k === 'file' ? '토픽·파일' : k === 'ext' ? '외부' : (TAGS[n.o] || '');
+    let h = `<div class="hd"><span class="nm">${esc(n.t)}</span><span class="tag">${esc(tag)}</span></div>`;
+    if (n.s && BADGE[n.s]) h += `<span class="bdg">${BADGE[n.s]}</span>`;
+    if (n.i) h += `<div class="io"><b>in</b><span>${esc(n.i)}</span></div>`;
+    if (n.u) h += `<div class="io"><b>out</b><span>${esc(n.u)}</span></div>`;
+    if (n.m) h += `<p class="nt">${esc(n.m)}</p>`;
+    if (n.n) h += noteLink(n.n);
+    d.innerHTML = h;
+    canvas.appendChild(d);
+    els[n.id] = d;
+  }
+  const over = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  over.setAttribute('class','over');
+  canvas.appendChild(over);
+  cur = {key, v, els, under, over, paths:[]};
+  $('cap').textContent = v.cap;
+  $('foot').innerHTML = (v.foot || []).map(t => `<p>${t}</p>`).join('');
+  requestAnimationFrame(() => { draw(); fit(true); });
+}
+
+function draw(){
+  const {v, els, under, over} = cur;
+  const W = canvas.scrollWidth, H = canvas.scrollHeight;
+  for (const s of [under, over]){ s.setAttribute('width', W); s.setAttribute('height', H); s.setAttribute('viewBox', `0 0 ${W} ${H}`); }
+  under.querySelectorAll('path.edge').forEach(e => e.remove());
+  over.innerHTML = '';
+  const R = {};
+  for (const id in els){ const e = els[id]; R[id] = {l:e.offsetLeft, t:e.offsetTop, w:e.offsetWidth, h:e.offsetHeight, r:e.offsetLeft+e.offsetWidth, b:e.offsetTop+e.offsetHeight, cx:e.offsetLeft+e.offsetWidth/2, cy:e.offsetTop+e.offsetHeight/2}; }
+  const E = v.edges.map((e,i) => {
+    const a = R[e.a], b = R[e.b];
+    let pa, pb;
+    if (e.route === 'top'){ pa = pb = 't'; }
+    else if (e.route === 'bottom'){ pa = pb = 'b'; }
+    else if (e.p){ [pa,pb] = e.p; }
+    else if (b.l >= a.r + 4){ pa='r'; pb='l'; }
+    else if (b.r <= a.l - 4){ pa='l'; pb='r'; }
+    else if (b.t >= a.b - 2){ pa='b'; pb='t'; }
+    else { pa='t'; pb='b'; }
+    return {...e, i, pa, pb, oa:0, ob:0};
+  });
+  const G = {};
+  for (const e of E){ (G[e.a+'|'+e.pa] = G[e.a+'|'+e.pa] || []).push({e, end:'a'}); (G[e.b+'|'+e.pb] = G[e.b+'|'+e.pb] || []).push({e, end:'b'}); }
+  for (const key in G){
+    const [id, port] = key.split('|'); const n = R[id]; const list = G[key];
+    const horiz = port === 'l' || port === 'r';
+    list.sort((x,y) => { const ox = R[x.end==='a'?x.e.b:x.e.a], oy = R[y.end==='a'?y.e.b:y.e.a]; return horiz ? ox.cy - oy.cy : ox.cx - oy.cx; });
+    const lim = (horiz ? n.h : n.w)/2 - 14;
+    list.forEach((it,k) => { let off = (k - (list.length-1)/2) * 16; off = Math.max(-lim, Math.min(lim, off)); it.e[it.end==='a'?'oa':'ob'] = off; });
+  }
+  const pt = (n,port,off) => port==='r' ? [n.r, n.cy+off] : port==='l' ? [n.l, n.cy+off] : port==='b' ? [n.cx+off, n.b] : [n.cx+off, n.t];
+  const dir = {r:[1,0], l:[-1,0], b:[0,1], t:[0,-1]};
+  cur.paths = [];
+  for (const e of E){
+    const a = R[e.a], b = R[e.b];
+    const p1 = pt(a, e.pa, e.oa), p2 = pt(b, e.pb, e.ob);
+    let d, lx, ly;
+    if (e.route){
+      const lane = e.lane || 0;
+      const busY = e.route === 'top' ? Math.min(a.t, b.t) - 24 - lane*10 : Math.max(a.b, b.b) + 24 + lane*10;
+      const pts = [p1, [p1[0], busY], [p2[0], busY], p2];
+      d = roundPoly(pts, 10);
+      lx = (p1[0]+p2[0])/2; ly = busY + (e.route === 'top' ? -7 : 15);
+    } else {
+      const dist = Math.hypot(p2[0]-p1[0], p2[1]-p1[1]);
+      let k = Math.max(28, Math.min(90, dist*0.45));
+      if (e.pa === e.pb) k = 92;
+      const d1 = dir[e.pa], d2 = dir[e.pb];
+      const c1 = [p1[0]+d1[0]*k, p1[1]+d1[1]*k], c2 = [p2[0]+d2[0]*k, p2[1]+d2[1]*k];
+      d = `M${p1[0]} ${p1[1]} C${c1[0]} ${c1[1]} ${c2[0]} ${c2[1]} ${p2[0]} ${p2[1]}`;
+      lx = (p1[0] + 3*c1[0] + 3*c2[0] + p2[0])/8; ly = (p1[1] + 3*c1[1] + 3*c2[1] + p2[1])/8;
+    }
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', d);
+    path.setAttribute('class', 'edge' + (e.d ? ' dash' : ''));
+    path.setAttribute('marker-end', 'url(#ah)');
+    under.appendChild(path);
+    let lab = null;
+    if (e.l){
+      lab = document.createElementNS('http://www.w3.org/2000/svg','text');
+      lab.setAttribute('class','elab');
+      const lines = e.l.split('\n');
+      lines.forEach((t,j) => { const ts = document.createElementNS('http://www.w3.org/2000/svg','tspan'); ts.setAttribute('x', lx); ts.setAttribute('y', ly - (lines.length-1)*6 + j*12 + 3); ts.textContent = t; lab.appendChild(ts); });
+      over.appendChild(lab);
+    }
+    cur.paths.push({path, lab, a:e.a, b:e.b});
+  }
+  for (const id in els){
+    const el = els[id];
+    el.onmouseenter = el.onfocus = () => hl(id);
+    el.onmouseleave = el.onblur = () => hl(null);
+  }
+}
+
+function roundPoly(p, r){
+  let d = `M${p[0][0]} ${p[0][1]}`;
+  for (let i = 1; i < p.length-1; i++){
+    const [x0,y0] = p[i-1], [x,y] = p[i], [x1,y1] = p[i+1];
+    const l0 = Math.hypot(x-x0,y-y0), l1 = Math.hypot(x1-x,y1-y);
+    const rr = Math.min(r, l0/2, l1/2);
+    const ax = x - (x-x0)/l0*rr, ay = y - (y-y0)/l0*rr, bx = x + (x1-x)/l1*rr, by = y + (y1-y)/l1*rr;
+    d += ` L${ax} ${ay} Q${x} ${y} ${bx} ${by}`;
+  }
+  const L = p[p.length-1]; return d + ` L${L[0]} ${L[1]}`;
+}
+
+function hl(id){
+  const {paths, els} = cur;
+  Object.values(els).forEach(e => e.classList.remove('me','nb2'));
+  if (!id){ canvas.classList.remove('hl'); paths.forEach(p => { p.path.classList.remove('on'); p.path.setAttribute('marker-end','url(#ah)'); if (p.lab) p.lab.classList.remove('on'); }); return; }
+  canvas.classList.add('hl');
+  els[id].classList.add('me');
+  for (const p of paths){
+    const on = p.a === id || p.b === id;
+    p.path.classList.toggle('on', on);
+    p.path.setAttribute('marker-end', on ? 'url(#ahh)' : 'url(#ah)');
+    if (p.lab) p.lab.classList.toggle('on', on);
+    if (on){ const o = p.a === id ? p.b : p.a; els[o].classList.add('nb2'); p.path.parentNode.appendChild(p.path); }
+  }
+}
+
+function applyScale(){
+  canvas.style.transform = `scale(${scale})`;
+  sizer.style.width = (dims.w*scale) + 'px';
+  sizer.style.height = (dims.h*scale) + 'px';
+  $('zval').textContent = Math.round(scale*100) + '%';
+}
+function fit(first){
+  dims = {w: canvas.scrollWidth, h: canvas.scrollHeight};
+  const avail = stage.clientWidth - 2;
+  scale = Math.max(0.8, Math.min(1, avail / dims.w));
+  if (first && dims.w <= avail) scale = 1;
+  applyScale();
+}
+function zoom(f){ scale = Math.max(0.4, Math.min(1.6, scale*f)); applyScale(); }
+$('zin').onclick = () => zoom(1.15);
+$('zout').onclick = () => zoom(1/1.15);
+$('zfit').onclick = () => { dims = {w: canvas.scrollWidth, h: canvas.scrollHeight}; scale = Math.min(1.2, (stage.clientWidth - 2) / dims.w); applyScale(); };
+$('z100').onclick = () => { scale = 1; applyScale(); };
+
+const tabs = $('tabs');
+ORDER.forEach(k => {
+  const b = document.createElement('button');
+  b.className = 'tab'; b.setAttribute('role','tab'); b.textContent = V[k].label; b.dataset.k = k;
+  b.onclick = () => { go(k); try { history.replaceState(null,'','#'+HASH[k]); } catch(e){} };
+  tabs.appendChild(b);
+});
+function go(k){
+  tabs.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.k === k)));
+  build(k);
+}
+function fromHash(){
+  const h = (location.hash || '').slice(1);
+  const k = ORDER.find(x => HASH[x] === h) || 'overview';
+  go(k);
+}
+window.addEventListener('hashchange', fromHash);
+window.addEventListener('resize', () => { if (cur) fit(true); });
+fromHash();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (cur){ draw(); fit(true); } });
+</script>
+</body></html>
